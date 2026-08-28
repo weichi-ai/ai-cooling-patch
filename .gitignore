@@ -1,0 +1,16 @@
+.tools/
+.dotnet-home/
+.appdata/
+.nuget/
+.test-data/
+.smoke-data*/
+artifacts/
+assets/brand/archive-human-shutdown/
+assets/brand/icon-sizes/
+assets/brand/*-concept.png
+assets/brand/published-exe-icon-check.png
+**/bin/
+**/obj/
+dotnet-install.ps1
+*.user
+*.suo

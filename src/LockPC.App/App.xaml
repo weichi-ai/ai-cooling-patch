@@ -1,0 +1,28 @@
+<Application x:Class="LockPC.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <SolidColorBrush x:Key="PageBackground" Color="#F5F7FA" />
+        <SolidColorBrush x:Key="CardBackground" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#22BFA9" />
+        <SolidColorBrush x:Key="PrimarySoftBrush" Color="#E3FAF6" />
+        <SolidColorBrush x:Key="HotBrush" Color="#FF7043" />
+        <SolidColorBrush x:Key="TextBrush" Color="#101525" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#667085" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#DCE3E8" />
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="18,10" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        </Style>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,35 @@
+<Window x:Class="LockPC.App.Views.LockOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Cursor="Arrow"
+        PreviewKeyDown="OnPreviewKeyDown"
+        Deactivated="OnDeactivated"
+        Closing="OnClosing">
+    <Grid x:Name="Backdrop">
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop x:Name="GradientStart" Color="#CC6E9F8D" Offset="0" />
+                <GradientStop x:Name="GradientEnd" Color="#E6213D37" Offset="1" />
+            </LinearGradientBrush>
+        </Grid.Background>
+
+        <Ellipse Width="520" Height="250" Fill="#35355F50" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-100,0,0,-70" />
+        <Ellipse Width="700" Height="320" Fill="#401F4439" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-180,-110" />
+        <Ellipse Width="110" Height="110" Fill="#45FFF3C0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,80,130,0" />
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="760" Margin="40" TextBlock.Foreground="#F4FBF7">
+            <TextBlock x:Name="KickerText" Text="强制降温" FontSize="14" Opacity="0.78" HorizontalAlignment="Center" />
+            <TextBlock x:Name="TitleText" Text="有点上头，强制降温中。" FontSize="38" FontWeight="SemiBold" TextAlignment="Center" Margin="0,18,0,8" TextWrapping="Wrap" />
+            <TextBlock x:Name="DescriptionText" Text="离开屏幕一会儿，退烧效果更好。" FontSize="17" Opacity="0.78" TextAlignment="Center" />
+            <TextBlock x:Name="CountdownText" Text="10:00" FontSize="82" FontWeight="SemiBold" FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,34,0,10" />
+            <TextBlock x:Name="FooterText" Text="距离下一轮专注还有" FontSize="15" Opacity="0.72" HorizontalAlignment="Center" />
+            <Button x:Name="EarlyEndButton" Content="提前撕贴" Visibility="Collapsed" HorizontalAlignment="Center" Margin="0,28,0,0" Background="#30FFFFFF" Foreground="White" BorderBrush="#55FFFFFF" Click="EarlyEndButton_Click" />
+        </StackPanel>
+    </Grid>
+</Window>
