@@ -34,13 +34,11 @@ artifacts\LockPC-win-x64\LockPC.App.exe
 
 ## GitHub 更新检查
 
-在 `src\LockPC.App\Core\AppMetadata.cs` 中填写公开 GitHub 仓库地址：
+应用默认使用以下公开 GitHub 仓库检查更新：
 
-```csharp
-public const string GitHubRepositoryUrl = "https://github.com/owner/repository";
-```
+`https://github.com/weichi-ai/ai-cooling-patch`
 
-开发测试也可以设置 `LOCKPC_GITHUB_REPOSITORY_URL` 环境变量临时覆盖。未配置地址或没有网络时不影响专注、休息和睡眠保护功能。
+开发测试可以设置 `LOCKPC_GITHUB_REPOSITORY_URL` 环境变量临时覆盖。没有网络时不影响专注、休息和睡眠保护功能。
 
 ## 开发构建
 

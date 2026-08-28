@@ -10,9 +10,8 @@ public static class AppMetadata
     public const string PrimarySlogan = "纵然 AI 风姿千千万，休要给我一双熊猫眼。";
     public const string ProductIntroduction = "给被 AI 勾了魂、忘记休息、舍不得睡的赛博人，一张退烧贴。";
 
-    // 发布前填写公开仓库地址，例如 https://github.com/owner/repository。
-    // 开发和测试时也可以通过 LOCKPC_GITHUB_REPOSITORY_URL 环境变量覆盖。
-    public const string GitHubRepositoryUrl = "";
+    // 开发和测试时可以通过 LOCKPC_GITHUB_REPOSITORY_URL 环境变量覆盖。
+    public const string GitHubRepositoryUrl = "https://github.com/weichi-ai/ai-cooling-patch";
 
     public static string EffectiveGitHubRepositoryUrl =>
         Environment.GetEnvironmentVariable("LOCKPC_GITHUB_REPOSITORY_URL")?.Trim()

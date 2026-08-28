@@ -15,6 +15,7 @@
     <AssemblyTitle>AI退烧贴</AssemblyTitle>
     <Product>AI退烧贴</Product>
     <Description>纵然 AI 风姿千千万，休要给我一双熊猫眼。</Description>
+    <RepositoryUrl>https://github.com/weichi-ai/ai-cooling-patch</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
