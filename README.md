@@ -27,7 +27,7 @@ AI退烧贴（项目代号 LockPC）是一款 Windows 10/11 专注与睡眠保�
 
 ### 获取与运行
 
-从 [GitHub Releases](https://github.com/weichi-ai/ai-cooling-patch/releases) 下载 `AI-Cooling-Patch-v1.0.0-win-x64-self-contained.zip`，完整解压后运行 `LockPC.App.exe`。
+从 [GitHub Releases](https://github.com/weichi-ai/ai-cooling-patch/releases) 下载 `AI-Cooling-Patch-v1.0.1-win-x64-self-contained.zip`，完整解压后运行 `LockPC.App.exe`。
 
 自包含版本无需安装 .NET。请勿只复制 exe，运行库必须与主程序保持在同一目录。首次体验建议打开“专注” → “试贴休息模式（10 秒）”。
 
@@ -82,7 +82,7 @@ AI Cooling Patch (project codename: LockPC) is a focus and sleep-protection util
 
 ### Download and run
 
-Download `AI-Cooling-Patch-v1.0.0-win-x64-self-contained.zip` from [GitHub Releases](https://github.com/weichi-ai/ai-cooling-patch/releases), extract the entire archive, then run `LockPC.App.exe`.
+Download `AI-Cooling-Patch-v1.0.1-win-x64-self-contained.zip` from [GitHub Releases](https://github.com/weichi-ai/ai-cooling-patch/releases), extract the entire archive, then run `LockPC.App.exe`.
 
 The self-contained build does not require .NET to be installed. Do not copy the exe by itself—the accompanying runtime files must remain in the same directory. For a first look, open Focus → “10-second break preview.”
 

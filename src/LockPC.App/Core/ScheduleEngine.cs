@@ -294,7 +294,7 @@ public sealed class ScheduleEngine : IDisposable
             LockPhase.RestPreview => "休息模式演示",
             LockPhase.RestPeelPreview => "提前撕贴演示",
             LockPhase.SleepPreview => "睡眠保护演示",
-            _ => "当前没有退烧计划"
+            _ => "当前没有专注计划"
         };
         var progress = 0d;
         if (_runtime.PhaseStartedUtc is not null && _runtime.PhaseEndsUtc is not null)

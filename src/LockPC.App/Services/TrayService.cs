@@ -33,7 +33,7 @@ public sealed class TrayService : IDisposable
     private void OnStateChanged(object? sender, RuntimeSnapshot snapshot)
     {
         _notifyIcon.Text = snapshot.Phase == LockPhase.Idle
-            ? "AI退烧贴 · 当前没有退烧计划"
+            ? "AI退烧贴 · 当前没有专注计划"
             : $"AI退烧贴 · {snapshot.StatusText}";
     }
 

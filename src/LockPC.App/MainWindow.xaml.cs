@@ -74,7 +74,7 @@ public partial class MainWindow : Window
             LockPhase.RestPreview => "休息模式演示中",
             LockPhase.RestPeelPreview => "提前撕贴演示中",
             LockPhase.SleepPreview => "睡眠保护演示中",
-            _ => "当前没有退烧计划"
+            _ => "当前没有专注计划"
         };
         CurrentPlanSubtitle.Text = snapshot.Phase switch
         {
@@ -102,7 +102,7 @@ public partial class MainWindow : Window
         try
         {
             var focus = SelectedTag(FocusMinutesCombo); var rest = SelectedTag(RestMinutesCombo); var rounds = SelectedTag(RoundsCombo);
-            var answer = MessageBox.Show($"即将开始 {rounds} 轮计划：每轮专注 {focus} 分钟，随后离屏休息 {rest} 分钟。\n\n专注中可以结束整组计划；休息中可填写理由提前撕贴。", "开始退烧计划", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            var answer = MessageBox.Show($"即将开始 {rounds} 轮计划：每轮专注 {focus} 分钟，随后离屏休息 {rest} 分钟。\n\n专注中可以结束整组计划；休息中可填写理由提前撕贴。", "开始专注计划", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (answer != MessageBoxResult.Yes) return;
             var settings = BuildSettingsFromControls(); settings.FocusMinutes = focus; settings.RestMinutes = rest; settings.FocusRounds = rounds;
             _engine.UpdateSettings(settings); _engine.StartPomodoro(focus, rest, rounds); MainTabs.SelectedIndex = 0;
