@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
     private TrayService? _tray;
     private MainWindow? _mainWindow;
     private SleepWarningWindow? _warningWindow;
+    private LockTransitionWindow? _transitionWindow;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -36,11 +37,8 @@ public partial class App : System.Windows.Application
         _tray = new TrayService(_mainWindow, _engine, RequestExit);
 
         _engine.SleepWarningRequested += OnSleepWarningRequested;
-        _engine.StateChanged += (_, snapshot) =>
-        {
-            if (snapshot.Phase is LockPhase.Rest or LockPhase.SleepLock)
-                _mainWindow.Hide();
-        };
+        _engine.LockTransitionRequested += OnLockTransitionRequested;
+        _engine.StateChanged += OnEngineStateChanged;
 
         _mainWindow.Show();
         _engine.Start();
@@ -60,6 +58,62 @@ public partial class App : System.Windows.Application
         });
     }
 
+    private void OnLockTransitionRequested(object? sender, LockTransitionEventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            CloseTransitionWindow();
+            if (e.Kind == LockTransitionKind.Sleep)
+                CloseSleepWarningWindow();
+
+            var window = new LockTransitionWindow(e);
+            _transitionWindow = window;
+            window.DelayRequested += (_, minutes) =>
+            {
+                if (_transitionWindow != window) return;
+                _engine?.DelayCurrentSleepOccurrence(minutes);
+                CloseTransitionWindow();
+            };
+            window.Closed += (_, _) =>
+            {
+                if (_transitionWindow == window)
+                    _transitionWindow = null;
+            };
+            window.Show();
+        });
+    }
+
+    private void OnEngineStateChanged(object? sender, RuntimeSnapshot snapshot)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (snapshot.Phase is LockPhase.Rest or LockPhase.SleepLock)
+                _mainWindow?.Hide();
+
+            if (_transitionWindow?.Kind == LockTransitionKind.Rest &&
+                snapshot.Phase is not (LockPhase.Focus or LockPhase.RestTransitionPreview))
+                CloseTransitionWindow();
+            else if (_transitionWindow?.Kind == LockTransitionKind.Sleep && snapshot.Phase == LockPhase.SleepLock)
+                CloseTransitionWindow();
+        });
+    }
+
+    private void CloseSleepWarningWindow()
+    {
+        if (_warningWindow is null) return;
+        _warningWindow.Close();
+        _warningWindow = null;
+    }
+
+    private void CloseTransitionWindow()
+    {
+        if (_transitionWindow is null) return;
+        var window = _transitionWindow;
+        _transitionWindow = null;
+        window.AllowClose = true;
+        window.Close();
+    }
+
     private void RequestExit()
     {
         if (_engine?.CurrentSnapshot.IsPlanActive == true)
@@ -68,6 +122,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        CloseSleepWarningWindow();
+        CloseTransitionWindow();
         _engine?.Dispose();
         _overlays?.Dispose();
         _tray?.Dispose();
@@ -78,6 +134,14 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        CloseSleepWarningWindow();
+        CloseTransitionWindow();
+        if (_engine is not null)
+        {
+            _engine.SleepWarningRequested -= OnSleepWarningRequested;
+            _engine.LockTransitionRequested -= OnLockTransitionRequested;
+            _engine.StateChanged -= OnEngineStateChanged;
+        }
         _engine?.Dispose();
         _overlays?.Dispose();
         _tray?.Dispose();

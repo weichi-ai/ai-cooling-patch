@@ -71,6 +71,7 @@ public partial class MainWindow : Window
             LockPhase.Focus => $"第 {snapshot.CurrentRound}/{snapshot.TotalRounds} 轮专注中",
             LockPhase.Rest => $"第 {snapshot.CurrentRound}/{snapshot.TotalRounds} 轮正在退烧",
             LockPhase.SleepLock => "今晚先睡，明天再聊",
+            LockPhase.RestTransitionPreview => "休息模式过渡演示中",
             LockPhase.RestPreview => "休息模式演示中",
             LockPhase.RestPeelPreview => "提前撕贴演示中",
             LockPhase.SleepPreview => "睡眠保护演示中",
@@ -81,7 +82,7 @@ public partial class MainWindow : Window
             LockPhase.Focus => "保持专注；需要结束整组计划时，请填写理由。",
             LockPhase.Rest => $"已退烧 {Math.Round(snapshot.PhaseProgress * 100):0}% · 可填写理由提前撕贴",
             LockPhase.SleepLock => "保护期间不可暂停、提前退出或修改计划。",
-            LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepPreview => "这是界面演示，不计入数据分析。",
+            LockPhase.RestTransitionPreview or LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepPreview => "这是界面演示，不计入数据分析。",
             _ => "今天准备和 AI 专注多久？"
         };
         CurrentCountdownText.Text = snapshot.Phase == LockPhase.Idle ? "--:--" : FormatRemaining(snapshot.Remaining);

@@ -10,9 +10,11 @@ public sealed class ScheduleEngine : IDisposable
     private RuntimeState _runtime;
     private AppSettings _settings;
     private bool _started;
+    private string? _lastLockTransitionKey;
 
     public event EventHandler<RuntimeSnapshot>? StateChanged;
     public event EventHandler<SleepWarningEventArgs>? SleepWarningRequested;
+    public event EventHandler<LockTransitionEventArgs>? LockTransitionRequested;
 
     public ScheduleEngine(StateStore store)
     {
@@ -110,13 +112,24 @@ public sealed class ScheduleEngine : IDisposable
         SaveAndPublish();
     }
 
-    public void StartRestPreview(TimeSpan duration) => StartPreview(LockPhase.RestPreview, duration);
+    public void StartRestPreview(TimeSpan duration)
+    {
+        EnsureIdleForPreview();
+        var now = DateTimeOffset.UtcNow;
+        _runtime.Phase = LockPhase.RestTransitionPreview;
+        _runtime.PhaseStartedUtc = now;
+        _runtime.PhaseEndsUtc = now.AddSeconds(AppMetadata.LockTransitionSeconds);
+        _runtime.PreviewDurationSeconds = Math.Max(1, (int)Math.Ceiling(duration.TotalSeconds));
+        SaveAndPublish();
+        RequestLockTransitionOnce($"rest-preview:{_runtime.PhaseEndsUtc.Value.UtcTicks}",
+            new LockTransitionEventArgs(LockTransitionKind.Rest, _runtime.PhaseEndsUtc.Value));
+    }
     public void StartRestPeelPreview(TimeSpan duration) => StartPreview(LockPhase.RestPeelPreview, duration);
     public void StartSleepPreview(TimeSpan duration) => StartPreview(LockPhase.SleepPreview, duration);
 
     public void EndPreview()
     {
-        if (_runtime.Phase is not (LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepPreview))
+        if (_runtime.Phase is not (LockPhase.RestTransitionPreview or LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepPreview))
             throw new InvalidOperationException("当前没有可结束的演示。");
         ResetToIdle();
     }
@@ -168,6 +181,7 @@ public sealed class ScheduleEngine : IDisposable
 
         RecoverExpiredState(utcNow);
         CheckSleepWarning(localNow);
+        CheckLockTransition(localNow, utcNow);
         Publish();
     }
 
@@ -208,6 +222,12 @@ public sealed class ScheduleEngine : IDisposable
                     ResetToIdle(false);
                     changed = true;
                     break;
+                case LockPhase.RestTransitionPreview:
+                    _runtime.Phase = LockPhase.RestPreview;
+                    _runtime.PhaseStartedUtc = previousEnd;
+                    _runtime.PhaseEndsUtc = previousEnd.AddSeconds(Math.Max(1, _runtime.PreviewDurationSeconds));
+                    changed = true;
+                    break;
                 default:
                     return;
             }
@@ -245,6 +265,52 @@ public sealed class ScheduleEngine : IDisposable
         _runtime.LastSleepWarningDate = date;
         _store.SaveRuntime(_runtime);
         SleepWarningRequested?.Invoke(this, new SleepWarningEventArgs(occurrence.Value.Start, occurrence.Value.End));
+    }
+
+    private void CheckLockTransition(DateTime localNow, DateTimeOffset utcNow)
+    {
+        var sleepOccurrence = FindLockTransitionSleepOccurrence(localNow);
+        if (sleepOccurrence is not null)
+        {
+            var occurrenceDate = DateOnly.FromDateTime(sleepOccurrence.Value.Start);
+            var locksAtUtc = new DateTimeOffset(sleepOccurrence.Value.Start).ToUniversalTime();
+            RequestLockTransitionOnce($"sleep:{locksAtUtc.UtcTicks}",
+                new LockTransitionEventArgs(LockTransitionKind.Sleep, locksAtUtc,
+                    _runtime.DelayedSleepOccurrenceDate != occurrenceDate));
+            return;
+        }
+
+        if (_runtime.Phase != LockPhase.Focus || _runtime.PhaseEndsUtc is null)
+            return;
+
+        var remaining = _runtime.PhaseEndsUtc.Value - utcNow;
+        if (remaining <= TimeSpan.Zero || remaining > TimeSpan.FromSeconds(AppMetadata.LockTransitionSeconds))
+            return;
+
+        var key = $"rest:{_runtime.PlanId}:{_runtime.CurrentRound}:{_runtime.PhaseEndsUtc.Value.UtcTicks}";
+        RequestLockTransitionOnce(key,
+            new LockTransitionEventArgs(LockTransitionKind.Rest, _runtime.PhaseEndsUtc.Value));
+    }
+
+    private (DateTime Start, DateTime End)? FindLockTransitionSleepOccurrence(DateTime localNow)
+    {
+        if (!_settings.SleepProtectionEnabled) return null;
+        foreach (var offset in new[] { 0, 1 })
+        {
+            var occurrence = CreateOccurrence(localNow.Date.AddDays(offset));
+            if (occurrence is null) continue;
+            var remaining = occurrence.Value.Start - localNow;
+            if (remaining > TimeSpan.Zero && remaining <= TimeSpan.FromSeconds(AppMetadata.LockTransitionSeconds))
+                return occurrence;
+        }
+        return null;
+    }
+
+    private void RequestLockTransitionOnce(string key, LockTransitionEventArgs args)
+    {
+        if (_lastLockTransitionKey == key) return;
+        _lastLockTransitionKey = key;
+        LockTransitionRequested?.Invoke(this, args);
     }
 
     private (DateTime Start, DateTime End)? FindActiveSleepOccurrence(DateTime localNow)
@@ -291,6 +357,7 @@ public sealed class ScheduleEngine : IDisposable
             LockPhase.Focus => "专注模式 · 正在生效",
             LockPhase.Rest => "退烧贴正在生效",
             LockPhase.SleepLock => "睡眠保护 · 正在生效",
+            LockPhase.RestTransitionPreview => "休息模式 · 过渡演示",
             LockPhase.RestPreview => "休息模式演示",
             LockPhase.RestPeelPreview => "提前撕贴演示",
             LockPhase.SleepPreview => "睡眠保护演示",

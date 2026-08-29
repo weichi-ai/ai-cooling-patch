@@ -6,6 +6,7 @@ public enum LockPhase
     Focus,
     Rest,
     SleepLock,
+    RestTransitionPreview,
     RestPreview,
     RestPeelPreview,
     SleepPreview
@@ -22,6 +23,7 @@ public sealed class RuntimeState
     public int TotalRounds { get; set; }
     public int FocusMinutes { get; set; }
     public int RestMinutes { get; set; }
+    public int PreviewDurationSeconds { get; set; }
     public DateOnly? DelayedSleepOccurrenceDate { get; set; }
     public int DelayedSleepMinutes { get; set; }
     public DateOnly? LastSleepWarningDate { get; set; }
@@ -37,6 +39,16 @@ public sealed record PlanEventRecord(Guid Id, Guid PlanId, PlanEventType EventTy
 public sealed record RuntimeSnapshot(LockPhase Phase, DateTimeOffset? PhaseEndsUtc,
     TimeSpan Remaining, int CurrentRound, int TotalRounds, bool IsPlanActive,
     string StatusText, double PhaseProgress);
+
+public enum LockTransitionKind { Rest, Sleep }
+
+public sealed class LockTransitionEventArgs(LockTransitionKind kind, DateTimeOffset locksAtUtc,
+    bool canDelaySleep = false) : EventArgs
+{
+    public LockTransitionKind Kind { get; } = kind;
+    public DateTimeOffset LocksAtUtc { get; } = locksAtUtc;
+    public bool CanDelaySleep { get; } = canDelaySleep;
+}
 
 public enum ActivityEventType
 {
