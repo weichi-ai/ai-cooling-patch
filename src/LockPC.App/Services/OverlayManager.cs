@@ -21,22 +21,13 @@ public sealed class OverlayManager : IDisposable
 
     private void OnStateChanged(object? sender, RuntimeSnapshot snapshot)
     {
-        var shouldLock = snapshot.Phase is LockPhase.Rest or LockPhase.SleepLock or LockPhase.RestPreview or LockPhase.SleepPreview;
-        if (!shouldLock)
-        {
-            CloseAll();
-            return;
-        }
-
+        var shouldLock = snapshot.Phase is LockPhase.Rest or LockPhase.SleepLock or LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepPreview;
+        if (!shouldLock) { CloseAll(); return; }
         if (_windows.Count == 0 || _visiblePhase != snapshot.Phase)
         {
-            CloseAll();
-            _visiblePhase = snapshot.Phase;
-            ShowOnAllScreens(snapshot);
+            CloseAll(); _visiblePhase = snapshot.Phase; ShowOnAllScreens(snapshot);
         }
-
-        foreach (var window in _windows)
-            window.UpdateSnapshot(snapshot);
+        foreach (var window in _windows) window.UpdateSnapshot(snapshot);
     }
 
     private void ShowOnAllScreens(RuntimeSnapshot snapshot)
@@ -46,48 +37,37 @@ public sealed class OverlayManager : IDisposable
         {
             var window = new LockOverlayWindow(screen, isSleep);
             window.EarlyRestRequested += OnEarlyRestRequested;
-            _windows.Add(window);
-            window.Show();
-            window.UpdateSnapshot(snapshot);
+            _windows.Add(window); window.Show(); window.UpdateSnapshot(snapshot);
         }
-
         _keyboardBlocker.Start();
         _windows.FirstOrDefault(window => window.IsPrimaryScreen)?.Activate();
     }
 
-    private void OnEarlyRestRequested(object? sender, EventArgs e)
+    private async void OnEarlyRestRequested(object? sender, EventArgs e)
     {
-        if (_reasonDialogOpen || sender is not LockOverlayWindow sourceWindow ||
-            _engine.CurrentSnapshot.Phase != LockPhase.Rest)
-            return;
-
+        var phase = _engine.CurrentSnapshot.Phase;
+        if (_reasonDialogOpen || sender is not LockOverlayWindow sourceWindow || phase is not (LockPhase.Rest or LockPhase.RestPeelPreview)) return;
         _reasonDialogOpen = true;
-        foreach (var window in _windows)
-            window.SuspendFocusRecovery = true;
+        foreach (var window in _windows) window.SuspendFocusRecovery = true;
         _keyboardBlocker.Stop();
-
         try
         {
-            var dialog = new CancelPlanWindow(ReasonPromptPurpose.EndRestEarly)
-            {
-                Owner = sourceWindow,
-                Topmost = true
-            };
-            if (dialog.ShowDialog() == true)
-                _engine.EndRestEarly(dialog.CancellationReason);
+            var dialog = new CancelPlanWindow(ReasonPromptPurpose.EndRestEarly) { Owner = sourceWindow, Topmost = true };
+            if (dialog.ShowDialog() != true) return;
+            var animationTasks = _windows.Select(window => window.PlayPeelAnimationAsync(_engine.Settings.PeelSoundEnabled)).ToArray();
+            await Task.WhenAll(animationTasks);
+            if (phase == LockPhase.Rest) _engine.EndRestEarly(dialog.CancellationReason);
+            else _engine.EndPreview();
         }
         catch (Exception exception)
         {
-            System.Windows.MessageBox.Show(exception.Message, "无法结束休息",
-                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            System.Windows.MessageBox.Show(exception.Message, "无法结束休息", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
         }
         finally
         {
             _reasonDialogOpen = false;
-            foreach (var window in _windows)
-                window.SuspendFocusRecovery = false;
-
-            if (_engine.CurrentSnapshot.Phase == LockPhase.Rest)
+            foreach (var window in _windows) window.SuspendFocusRecovery = false;
+            if (_engine.CurrentSnapshot.Phase is LockPhase.Rest or LockPhase.RestPeelPreview)
             {
                 _keyboardBlocker.Start();
                 _windows.FirstOrDefault(window => window.IsPrimaryScreen)?.Activate();
@@ -99,12 +79,10 @@ public sealed class OverlayManager : IDisposable
     {
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
-            if (_windows.Count == 0)
-                return;
-
+            if (_windows.Count == 0) return;
             var snapshot = _engine.CurrentSnapshot;
             CloseAll();
-            if (snapshot.Phase is LockPhase.Rest or LockPhase.SleepLock or LockPhase.RestPreview or LockPhase.SleepPreview)
+            if (snapshot.Phase is LockPhase.Rest or LockPhase.SleepLock or LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepPreview)
                 ShowOnAllScreens(snapshot);
         });
     }
@@ -118,15 +96,13 @@ public sealed class OverlayManager : IDisposable
             window.EarlyRestRequested -= OnEarlyRestRequested;
             window.Close();
         }
-        _windows.Clear();
-        _visiblePhase = LockPhase.Idle;
+        _windows.Clear(); _visiblePhase = LockPhase.Idle;
     }
 
     public void Dispose()
     {
         _engine.StateChanged -= OnStateChanged;
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
-        CloseAll();
-        _keyboardBlocker.Dispose();
+        CloseAll(); _keyboardBlocker.Dispose();
     }
 }

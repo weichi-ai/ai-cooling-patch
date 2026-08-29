@@ -12,4 +12,5 @@ public sealed class AppSettings
     public int SleepWarningSeconds { get; set; } = 30;
     public bool AllowDisplayPowerOff { get; set; } = true;
     public bool StartWithWindows { get; set; }
+    public bool PeelSoundEnabled { get; set; } = true;
 }

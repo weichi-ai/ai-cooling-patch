@@ -14,3 +14,4 @@ assets/brand/published-exe-icon-check.png
 dotnet-install.ps1
 *.user
 *.suo
+.publish-*/

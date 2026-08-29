@@ -22,7 +22,7 @@
         </Grid>
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button x:Name="KeepButton" Content="继续专注" Click="KeepPlan_Click" Margin="0,0,10,0" />
-            <Button x:Name="ConfirmButton" Content="记录原因并结束" IsEnabled="False" Background="#FF7043" Foreground="White" BorderThickness="0" Click="ConfirmCancel_Click" />
+            <Button x:Name="ConfirmButton" Content="结束本次专注计划" IsEnabled="False" Background="#FF7043" Foreground="White" BorderThickness="0" Click="ConfirmCancel_Click" />
         </StackPanel>
     </Grid>
 </Window>

@@ -15,6 +15,7 @@ public sealed class StateStore
     private readonly string _settingsPath;
     private readonly string _runtimePath;
     private readonly string _planEventsPath;
+    private readonly string _activityEventsPath;
 
     public StateStore()
     {
@@ -23,6 +24,7 @@ public sealed class StateStore
         _settingsPath = Path.Combine(_dataDirectory, "settings.json");
         _runtimePath = Path.Combine(_dataDirectory, "runtime.json");
         _planEventsPath = Path.Combine(_dataDirectory, "plan-events.json");
+        _activityEventsPath = Path.Combine(_dataDirectory, "activity-events.json");
         Directory.CreateDirectory(_dataDirectory);
     }
 
@@ -42,6 +44,18 @@ public sealed class StateStore
         var records = LoadPlanEvents().ToList();
         records.Add(record);
         SaveAtomic(_planEventsPath, records);
+    }
+
+    public IReadOnlyList<ActivityEventRecord> LoadActivityEvents() =>
+        Load(_activityEventsPath, new List<ActivityEventRecord>());
+
+    public void AppendActivityEvent(ActivityEventRecord record)
+    {
+        var records = LoadActivityEvents().ToList();
+        records.Add(record);
+        if (records.Count > 10000)
+            records = records.Skip(records.Count - 10000).ToList();
+        SaveAtomic(_activityEventsPath, records);
     }
 
     private static T Load<T>(string path, T fallback)
