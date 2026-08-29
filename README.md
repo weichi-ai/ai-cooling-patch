@@ -5,11 +5,24 @@
 <a id="中文"></a>
 ## 中文
 
+### AI虽顶，别太上头
+
 **纵然 AI 风姿千千万，休要给我一双熊猫眼。**
+
+给被 AI 勾了魂、忘记休息、舍不得睡的赛博人，一张退烧贴。
+
+用一张数字退烧贴，管住连续专注、强制离屏与夜间睡眠。
 
 AI退烧贴（项目代号 LockPC）是一款 Windows 10/11 专注与睡眠保护工具，通过专注计划、强制离屏休息和定时睡眠保护，减少长时间使用电脑与 AI 对休息、睡眠的影响。不戒 AI，只退烧。
 
-### 1.0 已实现功能
+### v1.0.1 更新
+
+- 首页启用“AI虽顶，别太上头”及完整品牌文案。
+- 空闲状态统一为“当前没有专注计划”。
+- 专注页统一使用“专注计划”和“开始专注计划”。
+- 主窗口标题栏与侧边品牌区不再显示版本号；完整版本仍在“设置 → 关于与更新”中显示。
+
+### v1.0.1 已实现功能
 
 - 专注计划：支持 15/25/30/45/50/60 分钟专注，专注期间电脑正常使用。
 - 强制休息：每轮专注结束后覆盖全部显示器，并阻断普通鼠标键盘操作。
@@ -27,7 +40,7 @@ AI退烧贴（项目代号 LockPC）是一款 Windows 10/11 专注与睡眠保�
 
 ### 获取与运行
 
-从 [GitHub Releases](https://github.com/weichi-ai/ai-cooling-patch/releases) 下载 `AI-Cooling-Patch-v1.0.1-win-x64-self-contained.zip`，完整解压后运行 `LockPC.App.exe`。
+从 [GitHub Release v1.0.1](https://github.com/weichi-ai/ai-cooling-patch/releases/tag/v1.0.1) 下载 [`AI-Cooling-Patch-v1.0.1-win-x64-self-contained.zip`](https://github.com/weichi-ai/ai-cooling-patch/releases/download/v1.0.1/AI-Cooling-Patch-v1.0.1-win-x64-self-contained.zip)，完整解压后运行 `LockPC.App.exe`。
 
 自包含版本无需安装 .NET。请勿只复制 exe，运行库必须与主程序保持在同一目录。首次体验建议打开“专注” → “试贴休息模式（10 秒）”。
 
@@ -60,11 +73,24 @@ dotnet build .\LockPC.sln
 <a id="english"></a>
 ## English
 
+### AI is great. Don’t get carried away.
+
 **AI is endlessly tempting. Your sleep still matters.**
+
+For cyber humans captivated by AI—forgetting to rest and reluctant to sleep—here is a cooling patch.
+
+One digital cooling patch for continuous focus, enforced off-screen breaks, and nighttime sleep protection.
 
 AI Cooling Patch (project codename: LockPC) is a focus and sleep-protection utility for Windows 10/11. It combines timed focus plans, enforced off-screen breaks, and scheduled sleep protection to reduce the impact of prolonged computer and AI use on rest and sleep. Keep the AI—cool the fever.
 
-### What’s included in 1.0
+### What changed in v1.0.1
+
+- Updated the home page with the “AI is great. Don’t get carried away.” brand message.
+- Standardized the idle state as “No active focus plan.”
+- Standardized focus-page wording around “Focus plan” and “Start focus plan.”
+- Removed version numbers from the window title and sidebar branding; the full version remains available under Settings → About & Updates.
+
+### What’s included in v1.0.1
 
 - Focus plans: 15/25/30/45/50/60-minute sessions while the computer remains usable.
 - Enforced breaks: covers every display and blocks ordinary mouse and keyboard input after each focus round.
@@ -82,7 +108,7 @@ AI Cooling Patch (project codename: LockPC) is a focus and sleep-protection util
 
 ### Download and run
 
-Download `AI-Cooling-Patch-v1.0.1-win-x64-self-contained.zip` from [GitHub Releases](https://github.com/weichi-ai/ai-cooling-patch/releases), extract the entire archive, then run `LockPC.App.exe`.
+Download [`AI-Cooling-Patch-v1.0.1-win-x64-self-contained.zip`](https://github.com/weichi-ai/ai-cooling-patch/releases/download/v1.0.1/AI-Cooling-Patch-v1.0.1-win-x64-self-contained.zip) from [GitHub Release v1.0.1](https://github.com/weichi-ai/ai-cooling-patch/releases/tag/v1.0.1), extract the entire archive, then run `LockPC.App.exe`.
 
 The self-contained build does not require .NET to be installed. Do not copy the exe by itself—the accompanying runtime files must remain in the same directory. For a first look, open Focus → “10-second break preview.”
 
