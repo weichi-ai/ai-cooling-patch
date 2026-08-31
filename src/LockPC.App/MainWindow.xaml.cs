@@ -63,18 +63,24 @@ public partial class MainWindow : Window
         {
             LockPhase.Focus => "专注模式 · 正在生效",
             LockPhase.Rest => "退烧贴正在生效",
+            LockPhase.RestCelebration => "休息完成 · 降温成功",
             LockPhase.SleepLock => "睡眠保护 · 正在生效",
+            LockPhase.SleepCelebration => "睡眠保护完成 · 早安",
             _ => "当前状态"
         };
         CurrentPlanTitle.Text = snapshot.Phase switch
         {
             LockPhase.Focus => $"第 {snapshot.CurrentRound}/{snapshot.TotalRounds} 轮专注中",
             LockPhase.Rest => $"第 {snapshot.CurrentRound}/{snapshot.TotalRounds} 轮正在退烧",
+            LockPhase.RestCelebration => "休息完成，正在撒花庆祝",
             LockPhase.SleepLock => "今晚先睡，明天再聊",
+            LockPhase.SleepCelebration => "睡眠保护完成，欢迎回来",
             LockPhase.RestTransitionPreview => "休息模式过渡演示中",
             LockPhase.RestPreview => "休息模式演示中",
             LockPhase.RestPeelPreview => "提前撕贴演示中",
+            LockPhase.SleepTransitionPreview => "睡眠保护过渡演示中",
             LockPhase.SleepPreview => "睡眠保护演示中",
+            LockPhase.RestCelebrationPreview or LockPhase.SleepCelebrationPreview => "完成撒花演示中",
             _ => "当前没有专注计划"
         };
         CurrentPlanSubtitle.Text = snapshot.Phase switch
@@ -82,7 +88,9 @@ public partial class MainWindow : Window
             LockPhase.Focus => "保持专注；需要结束整组计划时，请填写理由。",
             LockPhase.Rest => $"已退烧 {Math.Round(snapshot.PhaseProgress * 100):0}% · 可填写理由提前撕贴",
             LockPhase.SleepLock => "保护期间不可暂停、提前退出或修改计划。",
-            LockPhase.RestTransitionPreview or LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepPreview => "这是界面演示，不计入数据分析。",
+            LockPhase.RestCelebration or LockPhase.SleepCelebration => "庆祝结束后自动恢复正常使用。",
+            LockPhase.RestTransitionPreview or LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepTransitionPreview or
+                LockPhase.SleepPreview or LockPhase.RestCelebrationPreview or LockPhase.SleepCelebrationPreview => "这是界面演示，不计入数据分析。",
             _ => "今天准备和 AI 专注多久？"
         };
         CurrentCountdownText.Text = snapshot.Phase == LockPhase.Idle ? "--:--" : FormatRemaining(snapshot.Remaining);

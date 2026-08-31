@@ -2,14 +2,20 @@ namespace LockPC.App.Core;
 
 public enum LockPhase
 {
-    Idle,
-    Focus,
-    Rest,
-    SleepLock,
-    RestTransitionPreview,
-    RestPreview,
-    RestPeelPreview,
-    SleepPreview
+    // Keep the v1.1.0 numeric values stable because runtime.json stores enums as numbers.
+    Idle = 0,
+    Focus = 1,
+    Rest = 2,
+    SleepLock = 3,
+    RestTransitionPreview = 4,
+    RestPreview = 5,
+    RestPeelPreview = 6,
+    SleepPreview = 7,
+    RestCelebration = 8,
+    SleepCelebration = 9,
+    SleepTransitionPreview = 10,
+    RestCelebrationPreview = 11,
+    SleepCelebrationPreview = 12
 }
 
 public sealed class RuntimeState
@@ -68,8 +74,10 @@ public sealed record ActivityEventRecord(Guid Id, Guid? PlanId, ActivityEventTyp
     int DurationSeconds = 0, int RemainingSeconds = 0, int DelayMinutes = 0,
     string? Reason = null);
 
-public sealed class SleepWarningEventArgs(DateTime scheduledStartLocal, DateTime scheduledEndLocal) : EventArgs
+public sealed class SleepWarningEventArgs(DateTime scheduledStartLocal, DateTime scheduledEndLocal,
+    bool canDelay) : EventArgs
 {
     public DateTime ScheduledStartLocal { get; } = scheduledStartLocal;
     public DateTime ScheduledEndLocal { get; } = scheduledEndLocal;
+    public bool CanDelay { get; } = canDelay;
 }

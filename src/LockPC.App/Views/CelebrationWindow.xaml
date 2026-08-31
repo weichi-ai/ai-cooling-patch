@@ -1,0 +1,30 @@
+<Window x:Class="LockPC.App.Views.CelebrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
+        ShowActivated="False" Topmost="True" WindowStartupLocation="Manual"
+        Background="#FF102C31" Closing="Window_Closing">
+    <Grid ClipToBounds="True">
+        <Grid.Background>
+            <RadialGradientBrush Center="0.5,0.45" GradientOrigin="0.5,0.45" RadiusX="0.75" RadiusY="0.75">
+                <GradientStop x:Name="GlowColor" Color="#FF238B82" Offset="0"/>
+                <GradientStop Color="#FF102C31" Offset="0.52"/>
+                <GradientStop Color="#FF071517" Offset="1"/>
+            </RadialGradientBrush>
+        </Grid.Background>
+        <Canvas x:Name="ConfettiCanvas" IsHitTestVisible="False"/>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" TextBlock.Foreground="White">
+            <Border Width="92" Height="92" CornerRadius="46" Background="#2FFFFFFF"
+                    BorderBrush="#70FFFFFF" BorderThickness="1" HorizontalAlignment="Center">
+                <TextBlock x:Name="IconText" Text="✓" FontSize="52" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <TextBlock x:Name="KickerText" Text="退烧完成" FontSize="15" Opacity="0.72"
+                       HorizontalAlignment="Center" Margin="0,24,0,0"/>
+            <TextBlock x:Name="TitleText" Text="降温成功，欢迎回来！" FontSize="38" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" TextAlignment="Center" Margin="0,10,0,0"/>
+            <TextBlock x:Name="DescriptionText" Text="休息不是暂停，而是为下一次专注充电。" FontSize="17"
+                       Opacity="0.78" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>

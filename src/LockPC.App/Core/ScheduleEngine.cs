@@ -10,6 +10,7 @@ public sealed class ScheduleEngine : IDisposable
     private RuntimeState _runtime;
     private AppSettings _settings;
     private bool _started;
+    private bool _sessionLocked;
     private string? _lastLockTransitionKey;
 
     public event EventHandler<RuntimeSnapshot>? StateChanged;
@@ -125,27 +126,52 @@ public sealed class ScheduleEngine : IDisposable
             new LockTransitionEventArgs(LockTransitionKind.Rest, _runtime.PhaseEndsUtc.Value));
     }
     public void StartRestPeelPreview(TimeSpan duration) => StartPreview(LockPhase.RestPeelPreview, duration);
-    public void StartSleepPreview(TimeSpan duration) => StartPreview(LockPhase.SleepPreview, duration);
+    public void StartSleepPreview(TimeSpan duration)
+    {
+        EnsureIdleForPreview();
+        var now = DateTimeOffset.UtcNow;
+        _runtime.Phase = LockPhase.SleepTransitionPreview;
+        _runtime.PhaseStartedUtc = now;
+        _runtime.PhaseEndsUtc = now.AddSeconds(AppMetadata.LockTransitionSeconds);
+        _runtime.PreviewDurationSeconds = Math.Max(1, (int)Math.Ceiling(duration.TotalSeconds));
+        SaveAndPublish();
+        RequestLockTransitionOnce($"sleep-preview:{_runtime.PhaseEndsUtc.Value.UtcTicks}",
+            new LockTransitionEventArgs(LockTransitionKind.Sleep, _runtime.PhaseEndsUtc.Value));
+    }
 
     public void EndPreview()
     {
-        if (_runtime.Phase is not (LockPhase.RestTransitionPreview or LockPhase.RestPreview or LockPhase.RestPeelPreview or LockPhase.SleepPreview))
+        if (_runtime.Phase is not (LockPhase.RestTransitionPreview or LockPhase.RestPreview or LockPhase.RestPeelPreview or
+            LockPhase.SleepTransitionPreview or LockPhase.SleepPreview or LockPhase.RestCelebrationPreview or LockPhase.SleepCelebrationPreview))
             throw new InvalidOperationException("当前没有可结束的演示。");
         ResetToIdle();
     }
 
-    public void DelayCurrentSleepOccurrence(int minutes)
+    public bool DelayCurrentSleepOccurrence(int minutes)
     {
         if (minutes is < 1 or > 30) throw new ArgumentOutOfRangeException(nameof(minutes));
         var occurrence = FindWarningOccurrence(DateTime.Now);
-        if (occurrence is null) return;
+        if (occurrence is null) return false;
         var occurrenceDate = DateOnly.FromDateTime(occurrence.Value.Start);
-        if (_runtime.DelayedSleepOccurrenceDate == occurrenceDate) return;
+        if (_runtime.DelayedSleepOccurrenceDate == occurrenceDate) return false;
         _runtime.DelayedSleepOccurrenceDate = occurrenceDate;
         _runtime.DelayedSleepMinutes = minutes;
         AppendActivity(ActivityEventType.SleepDelayed, DateTimeOffset.UtcNow, delayMinutes: minutes);
         _store.SaveRuntime(_runtime);
         Publish();
+        return true;
+    }
+
+    public void SetSessionLocked(bool locked)
+    {
+        _sessionLocked = locked;
+        if (!locked && _runtime.Phase == LockPhase.SleepCelebration && _runtime.PhaseEndsUtc is null)
+        {
+            var now = DateTimeOffset.UtcNow;
+            _runtime.PhaseStartedUtc = now;
+            _runtime.PhaseEndsUtc = now.AddSeconds(AppMetadata.CelebrationSeconds);
+            SaveAndPublish();
+        }
     }
 
     private void Tick()
@@ -153,7 +179,7 @@ public sealed class ScheduleEngine : IDisposable
         var utcNow = DateTimeOffset.UtcNow;
         var localNow = DateTime.Now;
         var activeSleep = FindActiveSleepOccurrence(localNow);
-        if (activeSleep is not null && _runtime.Phase is not LockPhase.SleepPreview)
+        if (activeSleep is not null && !IsSleepPreviewPhase(_runtime.Phase))
         {
             var occurrenceDate = DateOnly.FromDateTime(activeSleep.Value.Start);
             var sleepEndUtc = new DateTimeOffset(activeSleep.Value.End).ToUniversalTime();
@@ -175,7 +201,7 @@ public sealed class ScheduleEngine : IDisposable
         {
             AppendActivity(ActivityEventType.SleepCompleted, utcNow,
                 durationSeconds: ElapsedSeconds(utcNow));
-            ResetToIdle();
+            StartCelebration(LockPhase.SleepCelebration, utcNow, waitForSessionUnlock: _sessionLocked);
             return;
         }
 
@@ -206,19 +232,26 @@ public sealed class ScheduleEngine : IDisposable
                     AppendActivity(ActivityEventType.RestCompleted, previousEnd, _runtime.PlanId,
                         durationSeconds: _runtime.RestMinutes * 60);
                     if (_runtime.CurrentRound >= _runtime.TotalRounds)
-                    {
                         AppendActivity(ActivityEventType.PlanCompleted, previousEnd, _runtime.PlanId);
+                    StartCelebration(LockPhase.RestCelebration, utcNow, publish: false);
+                    changed = true;
+                    break;
+                case LockPhase.RestCelebration:
+                    if (_runtime.CurrentRound >= _runtime.TotalRounds)
                         ResetToIdle(false);
-                    }
                     else
-                    {
                         StartNextFocus(previousEnd);
-                    }
+                    changed = true;
+                    break;
+                case LockPhase.SleepCelebration:
+                    ResetToIdle(false);
                     changed = true;
                     break;
                 case LockPhase.RestPreview:
+                    StartCelebration(LockPhase.RestCelebrationPreview, utcNow, publish: false);
+                    changed = true;
+                    break;
                 case LockPhase.RestPeelPreview:
-                case LockPhase.SleepPreview:
                     ResetToIdle(false);
                     changed = true;
                     break;
@@ -226,6 +259,21 @@ public sealed class ScheduleEngine : IDisposable
                     _runtime.Phase = LockPhase.RestPreview;
                     _runtime.PhaseStartedUtc = previousEnd;
                     _runtime.PhaseEndsUtc = previousEnd.AddSeconds(Math.Max(1, _runtime.PreviewDurationSeconds));
+                    changed = true;
+                    break;
+                case LockPhase.SleepTransitionPreview:
+                    _runtime.Phase = LockPhase.SleepPreview;
+                    _runtime.PhaseStartedUtc = previousEnd;
+                    _runtime.PhaseEndsUtc = previousEnd.AddSeconds(Math.Max(1, _runtime.PreviewDurationSeconds));
+                    changed = true;
+                    break;
+                case LockPhase.SleepPreview:
+                    StartCelebration(LockPhase.SleepCelebrationPreview, utcNow, publish: false);
+                    changed = true;
+                    break;
+                case LockPhase.RestCelebrationPreview:
+                case LockPhase.SleepCelebrationPreview:
+                    ResetToIdle(false);
                     changed = true;
                     break;
                 default:
@@ -253,9 +301,18 @@ public sealed class ScheduleEngine : IDisposable
         SaveAndPublish();
     }
 
+    private void StartCelebration(LockPhase phase, DateTimeOffset start,
+        bool waitForSessionUnlock = false, bool publish = true)
+    {
+        _runtime.Phase = phase;
+        _runtime.PhaseStartedUtc = start;
+        _runtime.PhaseEndsUtc = waitForSessionUnlock ? null : start.AddSeconds(AppMetadata.CelebrationSeconds);
+        if (publish) SaveAndPublish();
+    }
+
     private void CheckSleepWarning(DateTime localNow)
     {
-        if (!_settings.SleepProtectionEnabled || _runtime.Phase is LockPhase.SleepLock or LockPhase.SleepPreview) return;
+        if (!_settings.SleepProtectionEnabled || _runtime.Phase is LockPhase.SleepLock || IsSleepPreviewPhase(_runtime.Phase)) return;
         var occurrence = FindWarningOccurrence(localNow);
         if (occurrence is null) return;
         var date = DateOnly.FromDateTime(occurrence.Value.Start);
@@ -264,7 +321,8 @@ public sealed class ScheduleEngine : IDisposable
         if (localNow < warningStart || localNow >= occurrence.Value.Start) return;
         _runtime.LastSleepWarningDate = date;
         _store.SaveRuntime(_runtime);
-        SleepWarningRequested?.Invoke(this, new SleepWarningEventArgs(occurrence.Value.Start, occurrence.Value.End));
+        SleepWarningRequested?.Invoke(this, new SleepWarningEventArgs(occurrence.Value.Start, occurrence.Value.End,
+            _runtime.DelayedSleepOccurrenceDate != date));
     }
 
     private void CheckLockTransition(DateTime localNow, DateTimeOffset utcNow)
@@ -356,11 +414,16 @@ public sealed class ScheduleEngine : IDisposable
         {
             LockPhase.Focus => "专注模式 · 正在生效",
             LockPhase.Rest => "退烧贴正在生效",
+            LockPhase.RestCelebration => "休息完成 · 降温成功",
             LockPhase.SleepLock => "睡眠保护 · 正在生效",
+            LockPhase.SleepCelebration => "睡眠保护完成 · 早安",
             LockPhase.RestTransitionPreview => "休息模式 · 过渡演示",
             LockPhase.RestPreview => "休息模式演示",
             LockPhase.RestPeelPreview => "提前撕贴演示",
+            LockPhase.SleepTransitionPreview => "睡眠保护 · 过渡演示",
             LockPhase.SleepPreview => "睡眠保护演示",
+            LockPhase.RestCelebrationPreview => "休息完成撒花演示",
+            LockPhase.SleepCelebrationPreview => "睡眠保护完成撒花演示",
             _ => "当前没有专注计划"
         };
         var progress = 0d;
@@ -391,6 +454,9 @@ public sealed class ScheduleEngine : IDisposable
             throw new ArgumentException("理由不能少于 5 个字。", nameof(reason));
         return normalized;
     }
+
+    private static bool IsSleepPreviewPhase(LockPhase phase) => phase is
+        LockPhase.SleepTransitionPreview or LockPhase.SleepPreview or LockPhase.SleepCelebrationPreview;
 
     private void ResetToIdle(bool publish = true)
     {

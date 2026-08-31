@@ -92,7 +92,10 @@ public partial class LockTransitionWindow : Window
     private void Delay_Click(object sender, RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Button { Tag: string text } && int.TryParse(text, out var minutes))
+        {
+            DelayPanel.IsEnabled = false;
             DelayRequested?.Invoke(this, minutes);
+        }
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)

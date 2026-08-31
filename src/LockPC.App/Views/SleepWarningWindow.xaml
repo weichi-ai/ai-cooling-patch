@@ -25,9 +25,9 @@
             <TextBlock x:Name="MessageText" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#667085" FontSize="14" LineHeight="22" />
         </StackPanel>
         <TextBlock Grid.Row="2" x:Name="CountdownText" Text="00:30" FontSize="38" FontWeight="SemiBold" FontFamily="Consolas" Foreground="#101525" Margin="0,20,0,12" />
-        <StackPanel Grid.Row="3">
-            <TextBlock Text="今晚还可以申请最后一次延迟，最长 30 分钟。" Foreground="#667085" FontSize="12" Margin="0,0,0,8" />
-            <WrapPanel>
+        <StackPanel Grid.Row="3" x:Name="DelayPanel">
+            <TextBlock x:Name="DelayHintText" Text="今晚还可以申请最后一次延迟，最长 30 分钟。" Foreground="#667085" FontSize="12" Margin="0,0,0,8" />
+            <WrapPanel x:Name="DelayButtonsPanel">
                 <Button Content="再聊 5 分钟" Tag="5" Click="Delay_Click" Margin="0,0,8,0" />
                 <Button Content="再聊 10 分钟" Tag="10" Click="Delay_Click" Margin="0,0,8,0" />
                 <Button Content="再聊 15 分钟" Tag="15" Click="Delay_Click" Margin="0,0,8,0" />

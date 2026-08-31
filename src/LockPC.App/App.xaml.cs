@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Windows;
+using Microsoft.Win32;
 using LockPC.App.Core;
 using LockPC.App.Services;
 using LockPC.App.Views;
@@ -13,10 +14,12 @@ public partial class App : System.Windows.Application
     private StateStore? _store;
     private ScheduleEngine? _engine;
     private OverlayManager? _overlays;
+    private CelebrationManager? _celebrations;
     private TrayService? _tray;
     private MainWindow? _mainWindow;
     private SleepWarningWindow? _warningWindow;
     private LockTransitionWindow? _transitionWindow;
+    private LockPhase _lastObservedPhase = LockPhase.Idle;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -33,14 +36,18 @@ public partial class App : System.Windows.Application
         _store = new StateStore();
         _engine = new ScheduleEngine(_store);
         _overlays = new OverlayManager(_engine);
+        _celebrations = new CelebrationManager(_engine);
         _mainWindow = new MainWindow(_engine, _store);
         _tray = new TrayService(_mainWindow, _engine, RequestExit);
 
         _engine.SleepWarningRequested += OnSleepWarningRequested;
         _engine.LockTransitionRequested += OnLockTransitionRequested;
         _engine.StateChanged += OnEngineStateChanged;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
 
         _mainWindow.Show();
+        // A persisted pending celebration means the app has started on the user's desktop.
+        _engine.SetSessionLocked(false);
         _engine.Start();
     }
 
@@ -51,7 +58,7 @@ public partial class App : System.Windows.Application
             if (_warningWindow?.IsVisible == true)
                 return;
 
-            _warningWindow = new SleepWarningWindow(e.ScheduledStartLocal, e.ScheduledEndLocal);
+            _warningWindow = new SleepWarningWindow(e.ScheduledStartLocal, e.ScheduledEndLocal, e.CanDelay);
             _warningWindow.DelayRequested += (_, minutes) => _engine?.DelayCurrentSleepOccurrence(minutes);
             _warningWindow.Closed += (_, _) => _warningWindow = null;
             _warningWindow.Show();
@@ -93,9 +100,23 @@ public partial class App : System.Windows.Application
             if (_transitionWindow?.Kind == LockTransitionKind.Rest &&
                 snapshot.Phase is not (LockPhase.Focus or LockPhase.RestTransitionPreview))
                 CloseTransitionWindow();
-            else if (_transitionWindow?.Kind == LockTransitionKind.Sleep && snapshot.Phase == LockPhase.SleepLock)
+            else if (_transitionWindow?.Kind == LockTransitionKind.Sleep &&
+                snapshot.Phase is LockPhase.SleepLock or LockPhase.SleepPreview)
                 CloseTransitionWindow();
+
+            if (snapshot.Phase == LockPhase.SleepLock && _lastObservedPhase != LockPhase.SleepLock)
+            {
+                var locked = WindowsLockService.TryLockWorkstation();
+                _engine?.SetSessionLocked(locked);
+            }
+            _lastObservedPhase = snapshot.Phase;
         });
+    }
+
+    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason is not (SessionSwitchReason.SessionLock or SessionSwitchReason.SessionUnlock)) return;
+        Dispatcher.BeginInvoke(() => _engine?.SetSessionLocked(e.Reason == SessionSwitchReason.SessionLock));
     }
 
     private void CloseSleepWarningWindow()
@@ -126,6 +147,7 @@ public partial class App : System.Windows.Application
         CloseTransitionWindow();
         _engine?.Dispose();
         _overlays?.Dispose();
+        _celebrations?.Dispose();
         _tray?.Dispose();
         _mainWindow?.AllowApplicationClose();
         _singleInstance?.ReleaseMutex();
@@ -136,6 +158,7 @@ public partial class App : System.Windows.Application
     {
         CloseSleepWarningWindow();
         CloseTransitionWindow();
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         if (_engine is not null)
         {
             _engine.SleepWarningRequested -= OnSleepWarningRequested;
@@ -144,6 +167,7 @@ public partial class App : System.Windows.Application
         }
         _engine?.Dispose();
         _overlays?.Dispose();
+        _celebrations?.Dispose();
         _tray?.Dispose();
         _singleInstance?.Dispose();
         base.OnExit(e);
