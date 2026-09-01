@@ -88,6 +88,7 @@ public sealed class AnalyticsService(StateStore store)
         ActivityEventType.SleepStarted => "睡眠保护生效",
         ActivityEventType.SleepCompleted => "睡眠保护完成",
         ActivityEventType.SleepDelayed => "延迟睡眠保护",
+        ActivityEventType.SleepDelayRejected => "拒绝重复延迟",
         _ => type.ToString()
     };
 

@@ -13,16 +13,18 @@ public partial class LockTransitionWindow : Window
     private readonly DateTimeOffset _locksAtUtc;
     private readonly DispatcherTimer _timer;
     private int _displayedSeconds = -1;
+    private readonly DateOnly? _sleepOccurrenceDate;
 
     public LockTransitionKind Kind { get; }
     public bool AllowClose { get; set; }
-    public event EventHandler<int>? DelayRequested;
+    public event EventHandler<SleepDelayRequestEventArgs>? DelayRequested;
 
     public LockTransitionWindow(LockTransitionEventArgs transition)
     {
         InitializeComponent();
         Kind = transition.Kind;
         _locksAtUtc = transition.LocksAtUtc;
+        _sleepOccurrenceDate = transition.SleepOccurrenceDate;
 
         Left = Math.Max(0, (SystemParameters.PrimaryScreenWidth - Width) / 2);
         Top = Math.Max(0, (SystemParameters.PrimaryScreenHeight - Height) / 2);
@@ -91,10 +93,12 @@ public partial class LockTransitionWindow : Window
 
     private void Delay_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is System.Windows.Controls.Button { Tag: string text } && int.TryParse(text, out var minutes))
+        if (sender is System.Windows.Controls.Button { Tag: string text } && int.TryParse(text, out var minutes) &&
+            _sleepOccurrenceDate is { } occurrenceDate)
         {
             DelayPanel.IsEnabled = false;
-            DelayRequested?.Invoke(this, minutes);
+            DelayRequested?.Invoke(this, new SleepDelayRequestEventArgs(
+                occurrenceDate, minutes, SleepDelaySource.TransitionWindow));
         }
     }
 

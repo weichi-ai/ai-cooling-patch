@@ -1,20 +1,24 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using LockPC.App.Core;
 
 namespace LockPC.App.Views;
 
 public partial class SleepWarningWindow : Window
 {
     private readonly DateTime _scheduledStart;
+    private readonly DateOnly _occurrenceDate;
     private readonly DispatcherTimer _timer;
 
-    public event EventHandler<int>? DelayRequested;
+    public event EventHandler<SleepDelayRequestEventArgs>? DelayRequested;
 
-    public SleepWarningWindow(DateTime scheduledStart, DateTime scheduledEnd, bool canDelay)
+    public SleepWarningWindow(DateTime scheduledStart, DateTime scheduledEnd, bool canDelay,
+        DateOnly occurrenceDate)
     {
         InitializeComponent();
         _scheduledStart = scheduledStart;
+        _occurrenceDate = occurrenceDate;
         MessageText.Text = $"睡眠保护将在 30 秒后开始，请立即保存文件和正在进行的工作。到点后电脑将锁定，{scheduledEnd:MM月dd日 HH:mm} 自动解除。";
         SetDelayAvailable(canDelay);
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -38,7 +42,8 @@ public partial class SleepWarningWindow : Window
         if (sender is System.Windows.Controls.Button { Tag: string text } && int.TryParse(text, out var minutes))
         {
             SetDelayAvailable(false);
-            DelayRequested?.Invoke(this, minutes);
+            DelayRequested?.Invoke(this, new SleepDelayRequestEventArgs(
+                _occurrenceDate, minutes, SleepDelaySource.WarningWindow));
             Close();
         }
     }

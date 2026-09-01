@@ -5,8 +5,11 @@ namespace LockPC.App.Core;
 
 public sealed class ScheduleEngine : IDisposable
 {
+    private const int CurrentRuntimeSchemaVersion = 2;
     private readonly StateStore _store;
     private readonly DispatcherTimer _timer;
+    private readonly Func<DateTime> _localNow;
+    private readonly Func<DateTimeOffset> _utcNow;
     private RuntimeState _runtime;
     private AppSettings _settings;
     private bool _started;
@@ -17,23 +20,31 @@ public sealed class ScheduleEngine : IDisposable
     public event EventHandler<SleepWarningEventArgs>? SleepWarningRequested;
     public event EventHandler<LockTransitionEventArgs>? LockTransitionRequested;
 
-    public ScheduleEngine(StateStore store)
+    public ScheduleEngine(StateStore store) : this(store, () => DateTime.Now, () => DateTimeOffset.UtcNow)
+    {
+    }
+
+    public ScheduleEngine(StateStore store, Func<DateTime> localNow, Func<DateTimeOffset> utcNow)
     {
         _store = store;
+        _localNow = localNow;
+        _utcNow = utcNow;
         _settings = store.LoadSettings();
         _runtime = store.LoadRuntime();
+        MigrateLegacyRuntime(_localNow());
         _timer = new DispatcherTimer(DispatcherPriority.Send) { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += (_, _) => Tick();
     }
 
     public AppSettings Settings => _settings;
-    public RuntimeSnapshot CurrentSnapshot => CreateSnapshot(DateTimeOffset.UtcNow);
+    public RuntimeSnapshot CurrentSnapshot => CreateSnapshot(_utcNow());
 
     public void Start()
     {
         if (_started) return;
         _started = true;
-        RecoverExpiredState(DateTimeOffset.UtcNow);
+        PruneExpiredSleepState(_localNow());
+        RecoverExpiredState(_utcNow());
         Tick();
         _timer.Start();
     }
@@ -55,7 +66,7 @@ public sealed class ScheduleEngine : IDisposable
         if (restMinutes is < 1 or > 30) throw new ArgumentOutOfRangeException(nameof(restMinutes));
         if (rounds is < 1 or > 12) throw new ArgumentOutOfRangeException(nameof(rounds));
 
-        var now = DateTimeOffset.UtcNow;
+        var now = _utcNow();
         var planId = Guid.NewGuid();
         _runtime = new RuntimeState
         {
@@ -71,7 +82,10 @@ public sealed class ScheduleEngine : IDisposable
             DelayedSleepOccurrenceDate = _runtime.DelayedSleepOccurrenceDate,
             DelayedSleepMinutes = _runtime.DelayedSleepMinutes,
             LastSleepWarningDate = _runtime.LastSleepWarningDate,
-            ActiveSleepOccurrenceDate = _runtime.ActiveSleepOccurrenceDate
+            ActiveSleepOccurrenceDate = _runtime.ActiveSleepOccurrenceDate,
+            SchemaVersion = _runtime.SchemaVersion,
+            SleepDelayAppliedAtUtc = _runtime.SleepDelayAppliedAtUtc,
+            SleepDelaySource = _runtime.SleepDelaySource
         };
         AppendActivity(ActivityEventType.PlanStarted, now, planId);
         SaveAndPublish();
@@ -84,9 +98,9 @@ public sealed class ScheduleEngine : IDisposable
             throw new InvalidOperationException("只能在专注模式生效期间结束本次计划。");
         var remaining = RemainingSeconds();
         _store.AppendPlanEvent(new PlanEventRecord(Guid.NewGuid(), _runtime.PlanId.Value,
-            PlanEventType.PlanCancelled, DateTimeOffset.Now, normalized, _runtime.CurrentRound,
+            PlanEventType.PlanCancelled, _utcNow().ToLocalTime(), normalized, _runtime.CurrentRound,
             _runtime.TotalRounds, _runtime.FocusMinutes, _runtime.RestMinutes, remaining));
-        AppendActivity(ActivityEventType.PlanCancelled, DateTimeOffset.UtcNow, _runtime.PlanId,
+        AppendActivity(ActivityEventType.PlanCancelled, _utcNow(), _runtime.PlanId,
             remainingSeconds: remaining, reason: normalized);
         ResetToIdle();
     }
@@ -98,25 +112,25 @@ public sealed class ScheduleEngine : IDisposable
             throw new InvalidOperationException("当前不在休息退烧阶段。");
         var remaining = RemainingSeconds();
         _store.AppendPlanEvent(new PlanEventRecord(Guid.NewGuid(), _runtime.PlanId.Value,
-            PlanEventType.RestEndedEarly, DateTimeOffset.Now, normalized, _runtime.CurrentRound,
+            PlanEventType.RestEndedEarly, _utcNow().ToLocalTime(), normalized, _runtime.CurrentRound,
             _runtime.TotalRounds, _runtime.FocusMinutes, _runtime.RestMinutes, remaining));
-        AppendActivity(ActivityEventType.RestEndedEarly, DateTimeOffset.UtcNow, _runtime.PlanId,
+        AppendActivity(ActivityEventType.RestEndedEarly, _utcNow(), _runtime.PlanId,
             remainingSeconds: remaining, reason: normalized);
 
         if (_runtime.CurrentRound >= _runtime.TotalRounds)
         {
-            AppendActivity(ActivityEventType.PlanCompleted, DateTimeOffset.UtcNow, _runtime.PlanId);
+            AppendActivity(ActivityEventType.PlanCompleted, _utcNow(), _runtime.PlanId);
             ResetToIdle();
             return;
         }
-        StartNextFocus(DateTimeOffset.UtcNow);
+        StartNextFocus(_utcNow());
         SaveAndPublish();
     }
 
     public void StartRestPreview(TimeSpan duration)
     {
         EnsureIdleForPreview();
-        var now = DateTimeOffset.UtcNow;
+        var now = _utcNow();
         _runtime.Phase = LockPhase.RestTransitionPreview;
         _runtime.PhaseStartedUtc = now;
         _runtime.PhaseEndsUtc = now.AddSeconds(AppMetadata.LockTransitionSeconds);
@@ -129,7 +143,7 @@ public sealed class ScheduleEngine : IDisposable
     public void StartSleepPreview(TimeSpan duration)
     {
         EnsureIdleForPreview();
-        var now = DateTimeOffset.UtcNow;
+        var now = _utcNow();
         _runtime.Phase = LockPhase.SleepTransitionPreview;
         _runtime.PhaseStartedUtc = now;
         _runtime.PhaseEndsUtc = now.AddSeconds(AppMetadata.LockTransitionSeconds);
@@ -147,16 +161,23 @@ public sealed class ScheduleEngine : IDisposable
         ResetToIdle();
     }
 
-    public bool DelayCurrentSleepOccurrence(int minutes)
+    public bool DelayCurrentSleepOccurrence(DateOnly occurrenceDate, int minutes, SleepDelaySource source)
     {
         if (minutes is < 1 or > 30) throw new ArgumentOutOfRangeException(nameof(minutes));
-        var occurrence = FindWarningOccurrence(DateTime.Now);
-        if (occurrence is null) return false;
-        var occurrenceDate = DateOnly.FromDateTime(occurrence.Value.Start);
-        if (_runtime.DelayedSleepOccurrenceDate == occurrenceDate) return false;
+        var occurrence = FindWarningOccurrence(_localNow());
+        if (occurrence is null)
+            return RejectSleepDelay(occurrenceDate, minutes, source, "当前不在允许延迟的提醒时间内");
+        if (occurrence.Value.OccurrenceDate != occurrenceDate)
+            return RejectSleepDelay(occurrenceDate, minutes, source, "延迟请求不属于当前睡眠计划");
+        if (_runtime.DelayedSleepOccurrenceDate == occurrenceDate)
+            return RejectSleepDelay(occurrenceDate, minutes, source, "本次睡眠计划已经延迟过一次");
+
         _runtime.DelayedSleepOccurrenceDate = occurrenceDate;
         _runtime.DelayedSleepMinutes = minutes;
-        AppendActivity(ActivityEventType.SleepDelayed, DateTimeOffset.UtcNow, delayMinutes: minutes);
+        _runtime.SleepDelayAppliedAtUtc = _utcNow();
+        _runtime.SleepDelaySource = source;
+        AppendActivity(ActivityEventType.SleepDelayed, _utcNow(), delayMinutes: minutes,
+            sleepOccurrenceDate: occurrenceDate, sleepDelaySource: source);
         _store.SaveRuntime(_runtime);
         Publish();
         return true;
@@ -167,7 +188,7 @@ public sealed class ScheduleEngine : IDisposable
         _sessionLocked = locked;
         if (!locked && _runtime.Phase == LockPhase.SleepCelebration && _runtime.PhaseEndsUtc is null)
         {
-            var now = DateTimeOffset.UtcNow;
+            var now = _utcNow();
             _runtime.PhaseStartedUtc = now;
             _runtime.PhaseEndsUtc = now.AddSeconds(AppMetadata.CelebrationSeconds);
             SaveAndPublish();
@@ -176,12 +197,13 @@ public sealed class ScheduleEngine : IDisposable
 
     private void Tick()
     {
-        var utcNow = DateTimeOffset.UtcNow;
-        var localNow = DateTime.Now;
+        var utcNow = _utcNow();
+        var localNow = _localNow();
+        PruneExpiredSleepState(localNow);
         var activeSleep = FindActiveSleepOccurrence(localNow);
         if (activeSleep is not null && !IsSleepPreviewPhase(_runtime.Phase))
         {
-            var occurrenceDate = DateOnly.FromDateTime(activeSleep.Value.Start);
+            var occurrenceDate = activeSleep.Value.OccurrenceDate;
             var sleepEndUtc = new DateTimeOffset(activeSleep.Value.End).ToUniversalTime();
             if (_runtime.Phase != LockPhase.SleepLock || _runtime.PhaseEndsUtc != sleepEndUtc)
             {
@@ -191,7 +213,8 @@ public sealed class ScheduleEngine : IDisposable
                 if (_runtime.ActiveSleepOccurrenceDate != occurrenceDate)
                 {
                     _runtime.ActiveSleepOccurrenceDate = occurrenceDate;
-                    AppendActivity(ActivityEventType.SleepStarted, utcNow);
+                    AppendActivity(ActivityEventType.SleepStarted, utcNow,
+                        sleepOccurrenceDate: occurrenceDate);
                 }
                 SaveAndPublish();
                 return;
@@ -199,8 +222,10 @@ public sealed class ScheduleEngine : IDisposable
         }
         else if (_runtime.Phase == LockPhase.SleepLock)
         {
+            var completedOccurrenceDate = _runtime.ActiveSleepOccurrenceDate;
             AppendActivity(ActivityEventType.SleepCompleted, utcNow,
-                durationSeconds: ElapsedSeconds(utcNow));
+                durationSeconds: ElapsedSeconds(utcNow), sleepOccurrenceDate: completedOccurrenceDate);
+            ClearSleepOccurrenceState(completedOccurrenceDate);
             StartCelebration(LockPhase.SleepCelebration, utcNow, waitForSessionUnlock: _sessionLocked);
             return;
         }
@@ -294,7 +319,7 @@ public sealed class ScheduleEngine : IDisposable
     private void StartPreview(LockPhase phase, TimeSpan duration)
     {
         EnsureIdleForPreview();
-        var now = DateTimeOffset.UtcNow;
+        var now = _utcNow();
         _runtime.Phase = phase;
         _runtime.PhaseStartedUtc = now;
         _runtime.PhaseEndsUtc = now.Add(duration);
@@ -315,14 +340,14 @@ public sealed class ScheduleEngine : IDisposable
         if (!_settings.SleepProtectionEnabled || _runtime.Phase is LockPhase.SleepLock || IsSleepPreviewPhase(_runtime.Phase)) return;
         var occurrence = FindWarningOccurrence(localNow);
         if (occurrence is null) return;
-        var date = DateOnly.FromDateTime(occurrence.Value.Start);
+        var date = occurrence.Value.OccurrenceDate;
         if (_runtime.LastSleepWarningDate == date) return;
         var warningStart = occurrence.Value.Start.AddSeconds(-_settings.SleepWarningSeconds);
         if (localNow < warningStart || localNow >= occurrence.Value.Start) return;
         _runtime.LastSleepWarningDate = date;
         _store.SaveRuntime(_runtime);
         SleepWarningRequested?.Invoke(this, new SleepWarningEventArgs(occurrence.Value.Start, occurrence.Value.End,
-            _runtime.DelayedSleepOccurrenceDate != date));
+            _runtime.DelayedSleepOccurrenceDate != date, date));
     }
 
     private void CheckLockTransition(DateTime localNow, DateTimeOffset utcNow)
@@ -330,11 +355,11 @@ public sealed class ScheduleEngine : IDisposable
         var sleepOccurrence = FindLockTransitionSleepOccurrence(localNow);
         if (sleepOccurrence is not null)
         {
-            var occurrenceDate = DateOnly.FromDateTime(sleepOccurrence.Value.Start);
+            var occurrenceDate = sleepOccurrence.Value.OccurrenceDate;
             var locksAtUtc = new DateTimeOffset(sleepOccurrence.Value.Start).ToUniversalTime();
             RequestLockTransitionOnce($"sleep:{locksAtUtc.UtcTicks}",
                 new LockTransitionEventArgs(LockTransitionKind.Sleep, locksAtUtc,
-                    _runtime.DelayedSleepOccurrenceDate != occurrenceDate));
+                    _runtime.DelayedSleepOccurrenceDate != occurrenceDate, occurrenceDate));
             return;
         }
 
@@ -350,7 +375,7 @@ public sealed class ScheduleEngine : IDisposable
             new LockTransitionEventArgs(LockTransitionKind.Rest, _runtime.PhaseEndsUtc.Value));
     }
 
-    private (DateTime Start, DateTime End)? FindLockTransitionSleepOccurrence(DateTime localNow)
+    private SleepOccurrence? FindLockTransitionSleepOccurrence(DateTime localNow)
     {
         if (!_settings.SleepProtectionEnabled) return null;
         foreach (var offset in new[] { 0, 1 })
@@ -371,7 +396,7 @@ public sealed class ScheduleEngine : IDisposable
         LockTransitionRequested?.Invoke(this, args);
     }
 
-    private (DateTime Start, DateTime End)? FindActiveSleepOccurrence(DateTime localNow)
+    private SleepOccurrence? FindActiveSleepOccurrence(DateTime localNow)
     {
         if (!_settings.SleepProtectionEnabled) return null;
         foreach (var offset in new[] { -1, 0 })
@@ -382,7 +407,7 @@ public sealed class ScheduleEngine : IDisposable
         return null;
     }
 
-    private (DateTime Start, DateTime End)? FindWarningOccurrence(DateTime localNow)
+    private SleepOccurrence? FindWarningOccurrence(DateTime localNow)
     {
         if (!_settings.SleepProtectionEnabled) return null;
         foreach (var offset in new[] { 0, 1 })
@@ -395,16 +420,8 @@ public sealed class ScheduleEngine : IDisposable
         return null;
     }
 
-    private (DateTime Start, DateTime End)? CreateOccurrence(DateTime startDate)
-    {
-        if (!_settings.SleepDays.Contains(startDate.DayOfWeek)) return null;
-        var start = startDate.Date + _settings.SleepStart;
-        var end = startDate.Date + _settings.SleepEnd;
-        if (end <= start) end = end.AddDays(1);
-        if (_runtime.DelayedSleepOccurrenceDate == DateOnly.FromDateTime(startDate))
-            start = start.AddMinutes(Math.Clamp(_runtime.DelayedSleepMinutes, 0, 30));
-        return (start, end);
-    }
+    private SleepOccurrence? CreateOccurrence(DateTime startDate) =>
+        SleepSchedule.Create(_settings, _runtime, startDate);
 
     private RuntimeSnapshot CreateSnapshot(DateTimeOffset utcNow)
     {
@@ -437,12 +454,14 @@ public sealed class ScheduleEngine : IDisposable
     }
 
     private void AppendActivity(ActivityEventType type, DateTimeOffset at, Guid? planId = null,
-        int durationSeconds = 0, int remainingSeconds = 0, int delayMinutes = 0, string? reason = null) =>
+        int durationSeconds = 0, int remainingSeconds = 0, int delayMinutes = 0, string? reason = null,
+        DateOnly? sleepOccurrenceDate = null, SleepDelaySource? sleepDelaySource = null) =>
         _store.AppendActivityEvent(new ActivityEventRecord(Guid.NewGuid(), planId, type, at.ToLocalTime(),
-            _runtime.CurrentRound, _runtime.TotalRounds, durationSeconds, remainingSeconds, delayMinutes, reason));
+            _runtime.CurrentRound, _runtime.TotalRounds, durationSeconds, remainingSeconds, delayMinutes, reason,
+            sleepOccurrenceDate, sleepDelaySource));
 
     private int RemainingSeconds() => _runtime.PhaseEndsUtc is null ? 0 :
-        Math.Max(0, (int)Math.Ceiling((_runtime.PhaseEndsUtc.Value - DateTimeOffset.UtcNow).TotalSeconds));
+        Math.Max(0, (int)Math.Ceiling((_runtime.PhaseEndsUtc.Value - _utcNow()).TotalSeconds));
 
     private int ElapsedSeconds(DateTimeOffset now) => _runtime.PhaseStartedUtc is null ? 0 :
         Math.Max(0, (int)Math.Floor((now - _runtime.PhaseStartedUtc.Value).TotalSeconds));
@@ -458,23 +477,97 @@ public sealed class ScheduleEngine : IDisposable
     private static bool IsSleepPreviewPhase(LockPhase phase) => phase is
         LockPhase.SleepTransitionPreview or LockPhase.SleepPreview or LockPhase.SleepCelebrationPreview;
 
+    private bool RejectSleepDelay(DateOnly occurrenceDate, int minutes, SleepDelaySource source, string reason)
+    {
+        AppendActivity(ActivityEventType.SleepDelayRejected, _utcNow(),
+            delayMinutes: minutes, reason: reason, sleepOccurrenceDate: occurrenceDate,
+            sleepDelaySource: source);
+        return false;
+    }
+
+    private void ClearSleepOccurrenceState(DateOnly? occurrenceDate)
+    {
+        if (occurrenceDate is null || _runtime.DelayedSleepOccurrenceDate == occurrenceDate)
+        {
+            _runtime.DelayedSleepOccurrenceDate = null;
+            _runtime.DelayedSleepMinutes = 0;
+            _runtime.SleepDelayAppliedAtUtc = null;
+            _runtime.SleepDelaySource = null;
+        }
+        if (occurrenceDate is null || _runtime.LastSleepWarningDate == occurrenceDate)
+            _runtime.LastSleepWarningDate = null;
+        if (occurrenceDate is null || _runtime.ActiveSleepOccurrenceDate == occurrenceDate)
+            _runtime.ActiveSleepOccurrenceDate = null;
+    }
+
+    private void PruneExpiredSleepState(DateTime localNow)
+    {
+        var changed = false;
+        if (_runtime.DelayedSleepOccurrenceDate is { } delayedDate)
+        {
+            var occurrence = CreateOccurrence(delayedDate.ToDateTime(TimeOnly.MinValue));
+            if ((occurrence is null || SleepSchedule.IsOccurrenceExpired(occurrence.Value, localNow)) &&
+                !(_runtime.Phase == LockPhase.SleepLock && _runtime.ActiveSleepOccurrenceDate == delayedDate))
+            {
+                ClearSleepOccurrenceState(delayedDate);
+                changed = true;
+            }
+        }
+        if (_runtime.LastSleepWarningDate is { } warningDate)
+        {
+            var occurrence = CreateOccurrence(warningDate.ToDateTime(TimeOnly.MinValue));
+            if (occurrence is null || SleepSchedule.IsOccurrenceExpired(occurrence.Value, localNow))
+            {
+                _runtime.LastSleepWarningDate = null;
+                changed = true;
+            }
+        }
+        if (changed) _store.SaveRuntime(_runtime);
+    }
+
+    private void MigrateLegacyRuntime(DateTime localNow)
+    {
+        if (_runtime.SchemaVersion >= CurrentRuntimeSchemaVersion) return;
+
+        var preserveDelay = SleepSchedule.HasValidLegacyDelayEvidence(
+            _runtime, _settings, _store.LoadActivityEvents());
+        if (!preserveDelay)
+        {
+            _runtime.DelayedSleepOccurrenceDate = null;
+            _runtime.DelayedSleepMinutes = 0;
+            _runtime.SleepDelayAppliedAtUtc = null;
+            _runtime.SleepDelaySource = null;
+        }
+        _runtime.LastSleepWarningDate = null;
+        if (_runtime.Phase != LockPhase.SleepLock)
+            _runtime.ActiveSleepOccurrenceDate = null;
+        _runtime.SchemaVersion = CurrentRuntimeSchemaVersion;
+        _store.SaveRuntime(_runtime);
+        PruneExpiredSleepState(localNow);
+    }
+
     private void ResetToIdle(bool publish = true)
     {
         var delayedDate = _runtime.DelayedSleepOccurrenceDate;
         var delayedMinutes = _runtime.DelayedSleepMinutes;
         var warningDate = _runtime.LastSleepWarningDate;
+        var delayAppliedAtUtc = _runtime.SleepDelayAppliedAtUtc;
+        var delaySource = _runtime.SleepDelaySource;
         _runtime = new RuntimeState
         {
+            SchemaVersion = CurrentRuntimeSchemaVersion,
             DelayedSleepOccurrenceDate = delayedDate,
             DelayedSleepMinutes = delayedMinutes,
-            LastSleepWarningDate = warningDate
+            LastSleepWarningDate = warningDate,
+            SleepDelayAppliedAtUtc = delayAppliedAtUtc,
+            SleepDelaySource = delaySource
         };
         _store.SaveRuntime(_runtime);
         if (publish) Publish();
     }
 
     private void SaveAndPublish() { _store.SaveRuntime(_runtime); Publish(); }
-    private void Publish() => StateChanged?.Invoke(this, CreateSnapshot(DateTimeOffset.UtcNow));
+    private void Publish() => StateChanged?.Invoke(this, CreateSnapshot(_utcNow()));
     private void EnsureIdleForPreview()
     {
         if (_runtime.Phase != LockPhase.Idle) throw new InvalidOperationException("当前计划执行期间不能启动演示。");

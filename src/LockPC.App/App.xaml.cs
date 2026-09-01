@@ -58,8 +58,10 @@ public partial class App : System.Windows.Application
             if (_warningWindow?.IsVisible == true)
                 return;
 
-            _warningWindow = new SleepWarningWindow(e.ScheduledStartLocal, e.ScheduledEndLocal, e.CanDelay);
-            _warningWindow.DelayRequested += (_, minutes) => _engine?.DelayCurrentSleepOccurrence(minutes);
+            _warningWindow = new SleepWarningWindow(e.ScheduledStartLocal, e.ScheduledEndLocal,
+                e.CanDelay, e.OccurrenceDate);
+            _warningWindow.DelayRequested += (_, request) => _engine?.DelayCurrentSleepOccurrence(
+                request.OccurrenceDate, request.Minutes, request.Source);
             _warningWindow.Closed += (_, _) => _warningWindow = null;
             _warningWindow.Show();
         });
@@ -75,10 +77,11 @@ public partial class App : System.Windows.Application
 
             var window = new LockTransitionWindow(e);
             _transitionWindow = window;
-            window.DelayRequested += (_, minutes) =>
+            window.DelayRequested += (_, request) =>
             {
                 if (_transitionWindow != window) return;
-                _engine?.DelayCurrentSleepOccurrence(minutes);
+                _engine?.DelayCurrentSleepOccurrence(
+                    request.OccurrenceDate, request.Minutes, request.Source);
                 CloseTransitionWindow();
             };
             window.Closed += (_, _) =>
