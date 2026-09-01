@@ -2,11 +2,13 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using LockPC.App.Core;
 using LockPC.App.Services;
 using LockPC.App.Views;
 using MessageBox = System.Windows.MessageBox;
+using Forms = System.Windows.Forms;
 
 namespace LockPC.App;
 
@@ -16,6 +18,9 @@ public partial class MainWindow : Window
     private readonly StateStore _store;
     private readonly AnalyticsService _analytics;
     private readonly UpdateService _updateService = new();
+    private const int ActivityPageSize = 50;
+    private int _activityPage = 1;
+    private int _activityPageCount = 1;
     private bool _allowClose;
     private bool _updateCheckInProgress;
     private bool _hasCheckedForUpdates;
@@ -31,6 +36,27 @@ public partial class MainWindow : Window
         ReleaseNotesList.ItemsSource = AppMetadata.ReleaseNotes;
         RefreshAnalytics();
         UpdateSnapshot(engine.CurrentSnapshot);
+    }
+
+    private void Window_SourceInitialized(object? sender, EventArgs e) => FitToWorkingArea();
+
+    private void FitToWorkingArea()
+    {
+        var screen = Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle);
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var workArea = screen.WorkingArea;
+        var workLeft = workArea.Left / dpi.DpiScaleX;
+        var workTop = workArea.Top / dpi.DpiScaleY;
+        var workWidth = workArea.Width / dpi.DpiScaleX;
+        var workHeight = workArea.Height / dpi.DpiScaleY;
+        var availableWidth = Math.Max(480, workWidth - 24);
+        var availableHeight = Math.Max(400, workHeight - 24);
+        MinWidth = Math.Min(MinWidth, availableWidth);
+        MinHeight = Math.Min(MinHeight, availableHeight);
+        Width = Math.Min(Width, availableWidth);
+        Height = Math.Min(Height, availableHeight);
+        Left = workLeft + Math.Max(12, (workWidth - Width) / 2);
+        Top = workTop + Math.Max(12, (workHeight - Height) / 2);
     }
 
     private void LoadSettings(AppSettings settings)
@@ -111,8 +137,8 @@ public partial class MainWindow : Window
         try
         {
             var focus = SelectedTag(FocusMinutesCombo); var rest = SelectedTag(RestMinutesCombo); var rounds = SelectedTag(RoundsCombo);
-            var answer = MessageBox.Show($"即将开始 {rounds} 轮计划：每轮专注 {focus} 分钟，随后离屏休息 {rest} 分钟。\n\n专注中可以结束整组计划；休息中可填写理由提前撕贴。", "开始专注计划", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (answer != MessageBoxResult.Yes) return;
+            var dialog = new StartFocusPlanWindow(focus, rest, rounds) { Owner = this };
+            if (dialog.ShowDialog() != true) return;
             var settings = BuildSettingsFromControls(); settings.FocusMinutes = focus; settings.RestMinutes = rest; settings.FocusRounds = rounds;
             _engine.UpdateSettings(settings); _engine.StartPomodoro(focus, rest, rounds); MainTabs.SelectedIndex = 0;
         }
@@ -182,8 +208,46 @@ public partial class MainWindow : Window
         MetricFocusText.Text = $"{data.FocusMinutes} 分钟"; MetricRoundsText.Text = $"{data.FocusRounds} 轮完成";
         MetricRestRateText.Text = $"{data.FullRestRate}%"; MetricRestCountText.Text = $"{data.FullRestCount} 次完整休息";
         MetricInterruptionsText.Text = $"{data.Interruptions} 次"; MetricSleepText.Text = $"{data.SleepNights} 晚"; MetricDelayText.Text = $"延迟 {data.SleepDelays} 次";
-        DailyFocusList.ItemsSource = data.DailyFocus; InterruptionBucketList.ItemsSource = data.InterruptionBuckets; ActivityList.ItemsSource = data.ActivityRows;
-        EmptyActivityText.Visibility = data.ActivityRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DailyFocusList.ItemsSource = data.DailyFocus; InterruptionBucketList.ItemsSource = data.InterruptionBuckets;
+        UpdateActivityPage();
+    }
+
+    private void UpdateActivityPage()
+    {
+        var page = _analytics.BuildActivityPage(SelectedActivityRange(), _activityPage, ActivityPageSize);
+        _activityPage = page.Page;
+        _activityPageCount = page.PageCount;
+        ActivityList.ItemsSource = page.Rows;
+        EmptyActivityText.Visibility = page.TotalCount == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ActivityPaginationPanel.Visibility = page.TotalCount > ActivityPageSize ? Visibility.Visible : Visibility.Collapsed;
+        ActivityPageText.Text = $"第 {_activityPage} / {_activityPageCount} 页 · 共 {page.TotalCount} 条";
+        PreviousActivityPageButton.IsEnabled = _activityPage > 1;
+        NextActivityPageButton.IsEnabled = _activityPage < _activityPageCount;
+    }
+
+    private ActivityHistoryRange SelectedActivityRange() =>
+        ActivityRangeCombo.SelectedItem is ComboBoxItem { Tag: string tag } &&
+        Enum.TryParse<ActivityHistoryRange>(tag, out var range) ? range : ActivityHistoryRange.Last7Days;
+
+    private void PreviousActivityPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activityPage <= 1) return;
+        _activityPage--;
+        UpdateActivityPage();
+    }
+
+    private void NextActivityPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activityPage >= _activityPageCount) return;
+        _activityPage++;
+        UpdateActivityPage();
+    }
+
+    private void ActivityRangeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _activityPage = 1;
+        UpdateActivityPage();
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e) => await CheckForUpdatesAsync(false);

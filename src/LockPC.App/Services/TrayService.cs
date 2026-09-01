@@ -21,7 +21,7 @@ public sealed class TrayService : IDisposable
 
         _notifyIcon = new Forms.NotifyIcon
         {
-            Text = "AI退烧贴",
+            Text = BuildTooltip(_engine.CurrentSnapshot),
             Icon = Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? Drawing.SystemIcons.Application,
             ContextMenuStrip = menu,
             Visible = true
@@ -32,10 +32,20 @@ public sealed class TrayService : IDisposable
 
     private void OnStateChanged(object? sender, RuntimeSnapshot snapshot)
     {
-        _notifyIcon.Text = snapshot.Phase == LockPhase.Idle
-            ? "AI退烧贴 · 当前没有专注计划"
-            : $"AI退烧贴 · {snapshot.StatusText}";
+        _notifyIcon.Text = BuildTooltip(snapshot);
     }
+
+    public static string BuildTooltip(RuntimeSnapshot snapshot) => snapshot.Phase switch
+    {
+        LockPhase.Idle => "AI退烧贴\n当前没有专注计划",
+        LockPhase.Focus => $"专注中 · 第 {snapshot.CurrentRound}/{snapshot.TotalRounds} 轮\n{FormatRemaining(snapshot.Remaining)} 后进入离屏休息",
+        LockPhase.Rest => $"离屏休息 · 第 {snapshot.CurrentRound}/{snapshot.TotalRounds} 轮\n剩余 {FormatRemaining(snapshot.Remaining)}",
+        _ => $"AI退烧贴\n{snapshot.StatusText}"
+    };
+
+    private static string FormatRemaining(TimeSpan remaining) => remaining.TotalHours >= 1
+        ? $"{(int)remaining.TotalHours}:{remaining.Minutes:00}:{remaining.Seconds:00}"
+        : $"{remaining.Minutes:00}:{remaining.Seconds:00}";
 
     private void ShowMainWindow(MainWindow window)
     {

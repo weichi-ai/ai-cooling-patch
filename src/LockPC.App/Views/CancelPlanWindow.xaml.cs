@@ -49,6 +49,16 @@ public partial class CancelPlanWindow : Window
 
     private void ConfirmCancel_Click(object sender, RoutedEventArgs e)
     {
+        var length = ReasonTextBox.Text.Trim().EnumerateRunes().Count();
+        if (length < 5)
+        {
+            CountText.Text = $"还需输入 {5 - length} 个字";
+            CountText.Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(196, 67, 38));
+            ReasonTextBox.Focus();
+            return;
+        }
+
         CancellationReason = ReasonTextBox.Text.Trim();
         DialogResult = true;
         Close();

@@ -6,6 +6,23 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="#F5F7FA">
+    <Window.Resources>
+        <Style x:Key="SecondaryActionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="White" />
+            <Setter Property="Foreground" Value="#475467" />
+            <Setter Property="BorderBrush" Value="#98A2B3" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#EAECF0" />
+                    <Setter Property="Foreground" Value="#667085" />
+                    <Setter Property="BorderBrush" Value="#D0D5DD" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                    <Setter Property="Opacity" Value="1" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
     <Grid Margin="28">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -22,7 +39,7 @@
         </Grid>
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button x:Name="KeepButton" Content="继续专注" Click="KeepPlan_Click" Margin="0,0,10,0" />
-            <Button x:Name="ConfirmButton" Content="结束本次专注计划" IsEnabled="False" Background="#FF7043" Foreground="White" BorderThickness="0" Click="ConfirmCancel_Click" />
+            <Button x:Name="ConfirmButton" Content="结束本次专注计划" IsEnabled="False" Style="{StaticResource SecondaryActionButton}" Click="ConfirmCancel_Click" />
         </StackPanel>
     </Grid>
 </Window>

@@ -15,7 +15,7 @@ public sealed class StateStore
     private readonly string _settingsPath;
     private readonly string _runtimePath;
     private readonly string _planEventsPath;
-    private readonly string _activityEventsPath;
+    private readonly ActivityEventStore _activityEvents;
 
     public StateStore()
     {
@@ -24,8 +24,8 @@ public sealed class StateStore
         _settingsPath = Path.Combine(_dataDirectory, "settings.json");
         _runtimePath = Path.Combine(_dataDirectory, "runtime.json");
         _planEventsPath = Path.Combine(_dataDirectory, "plan-events.json");
-        _activityEventsPath = Path.Combine(_dataDirectory, "activity-events.json");
         Directory.CreateDirectory(_dataDirectory);
+        _activityEvents = new ActivityEventStore(_dataDirectory);
     }
 
     public AppSettings LoadSettings() => Load(_settingsPath, new AppSettings());
@@ -46,16 +46,17 @@ public sealed class StateStore
         SaveAtomic(_planEventsPath, records);
     }
 
-    public IReadOnlyList<ActivityEventRecord> LoadActivityEvents() =>
-        Load(_activityEventsPath, new List<ActivityEventRecord>());
+    public IReadOnlyList<ActivityEventRecord> LoadActivityEvents() => _activityEvents.LoadAll();
+
+    public IReadOnlyList<ActivityEventRecord> LoadActivityEvents(DateTimeOffset fromInclusive) =>
+        _activityEvents.LoadRange(fromInclusive);
+
+    public ActivityEventPage LoadActivityEventPage(DateTimeOffset? fromInclusive, int page, int pageSize) =>
+        _activityEvents.LoadPage(fromInclusive, page, pageSize);
 
     public void AppendActivityEvent(ActivityEventRecord record)
     {
-        var records = LoadActivityEvents().ToList();
-        records.Add(record);
-        if (records.Count > 10000)
-            records = records.Skip(records.Count - 10000).ToList();
-        SaveAtomic(_activityEventsPath, records);
+        _activityEvents.Append(record);
     }
 
     private static T Load<T>(string path, T fallback)

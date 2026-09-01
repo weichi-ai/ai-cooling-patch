@@ -1,6 +1,79 @@
 using LockPC.App.Core;
+using LockPC.App.Services;
+using System.Text.Json;
 
 var failures = new List<string>();
+Run("v1.1.3 会把 JSON 活动记录幂等迁移到 SQLite", () =>
+{
+    var testDirectory = Path.Combine(Path.GetTempPath(), $"LockPC-SqliteMigration-{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(testDirectory);
+        var legacyEvents = new[]
+        {
+            DelayEvent(new DateTimeOffset(2026, 8, 31, 23, 29, 40, TimeSpan.FromHours(8)), 30),
+            new ActivityEventRecord(Guid.NewGuid(), Guid.NewGuid(), ActivityEventType.PlanStarted,
+                new DateTimeOffset(2026, 9, 1, 9, 0, 0, TimeSpan.FromHours(8)), CurrentRound: 1, TotalRounds: 4)
+        };
+        File.WriteAllText(Path.Combine(testDirectory, "activity-events.json"), JsonSerializer.Serialize(legacyEvents));
+        Environment.SetEnvironmentVariable("LOCKPC_DATA_DIR", testDirectory);
+
+        var firstStore = new StateStore();
+        Equal(2, firstStore.LoadActivityEvents().Count);
+        True(File.Exists(Path.Combine(testDirectory, "activity-events.db")));
+        True(File.Exists(Path.Combine(testDirectory, "activity-events.v1.1.2.json.bak")));
+
+        var secondStore = new StateStore();
+        Equal(2, secondStore.LoadActivityEvents().Count);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("LOCKPC_DATA_DIR", null);
+        if (Directory.Exists(testDirectory)) Directory.Delete(testDirectory, true);
+    }
+});
+
+Run("SQLite 历史记录支持全量 50 行分页与日期范围", () =>
+{
+    var testDirectory = Path.Combine(Path.GetTempPath(), $"LockPC-SqlitePaging-{Guid.NewGuid():N}");
+    var baseTime = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+    try
+    {
+        Environment.SetEnvironmentVariable("LOCKPC_DATA_DIR", testDirectory);
+        var store = new StateStore();
+        for (var index = 0; index < 125; index++)
+            store.AppendActivityEvent(new ActivityEventRecord(Guid.NewGuid(), null,
+                ActivityEventType.PlanStarted, baseTime.AddMinutes(-index)));
+
+        var firstPage = store.LoadActivityEventPage(null, 1, 50);
+        var thirdPage = store.LoadActivityEventPage(null, 3, 50);
+        var recentPage = store.LoadActivityEventPage(baseTime.AddMinutes(-9), 1, 50);
+        Equal(125, firstPage.TotalCount);
+        Equal(50, firstPage.Events.Count);
+        Equal(25, thirdPage.Events.Count);
+        Equal(10, recentPage.TotalCount);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("LOCKPC_DATA_DIR", null);
+        if (Directory.Exists(testDirectory)) Directory.Delete(testDirectory, true);
+    }
+});
+
+Run("托盘空闲状态使用两行提示", () =>
+{
+    var snapshot = new RuntimeSnapshot(LockPhase.Idle, null, TimeSpan.Zero, 0, 0, false,
+        "当前没有专注计划", 0);
+    Equal("AI退烧贴\n当前没有专注计划", TrayService.BuildTooltip(snapshot));
+});
+
+Run("托盘专注状态显示轮次与倒计时", () =>
+{
+    var snapshot = new RuntimeSnapshot(LockPhase.Focus, null, new TimeSpan(0, 23, 41), 2, 4, true,
+        "专注模式 · 正在生效", 0.5);
+    Equal("专注中 · 第 2/4 轮\n23:41 后进入离屏休息", TrayService.BuildTooltip(snapshot));
+});
+
 Run("跨零点延迟保持原计划日期", () =>
 {
     var settings = TestSettings();
@@ -169,7 +242,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("All 7 sleep schedule scenarios passed.");
+Console.WriteLine("All 11 schedule, tray, and SQLite scenarios passed.");
 return 0;
 
 void Run(string name, Action action)

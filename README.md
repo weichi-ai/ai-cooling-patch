@@ -15,15 +15,16 @@
 
 AI退烧贴（项目代号 LockPC）是一款 Windows 10/11 专注与睡眠保护工具，通过专注计划、强制离屏休息和定时睡眠保护，减少长时间使用电脑与 AI 对休息、睡眠的影响。不戒 AI，只退烧。
 
-### v1.1.2 更新
+### v1.1.3 更新
 
-- 修复 23:30 延迟到次日 00:00 后，延迟状态错误串到下一晚、导致下一晚也自动推迟 30 分钟的问题。
-- 每次睡眠计划使用不随延迟改变的“计划归属日期”；跨零点后仍属于原来的当晚计划。
-- 延迟请求同时校验计划身份、允许时间和使用次数；旧窗口或重复请求会在引擎层拒绝并记录原因。
-- 首次启动时自动识别并清理 v1.1.1 遗留的异常延迟状态，合法且仍在执行的当晚延迟不会被误删。
-- 睡眠保护完成后立即清除本次提醒、延迟与活动标识，下一晚恢复原定时间。
+- 活动历史从 JSON 迁移为应用内嵌 SQLite，取消 10,000 条上限并避免每次记录都重写整个历史文件。
+- 首次启动自动导入原有 `activity-events.json`，迁移幂等，并保留 `activity-events.v1.1.2.json.bak` 备份。
+- 历史记录默认显示最近 7 天，支持最近 15 天、最近 30 天和全部记录筛选，每页 50 条。
+- 专注轮数补齐为 1–12 轮，开始前使用新的计划摘要确认弹窗。
+- 系统托盘显示当前轮次和进入离屏休息的剩余时间；空闲状态使用两行提示。
+- 修复高 DPI 和小屏幕下窗口超出工作区的问题，并改善提前撕贴按钮与休息文案。
 
-### v1.1.2 已实现功能
+### v1.1.3 已实现功能
 
 - 专注计划：支持 15/25/30/45/50/60 分钟专注，专注期间电脑正常使用。
 - 强制休息：每轮专注结束后覆盖全部显示器，并阻断普通鼠标键盘操作。
@@ -37,12 +38,12 @@ AI退烧贴（项目代号 LockPC）是一款 Windows 10/11 专注与睡眠保�
 - 安全演示：休息与睡眠演示均完整展示 15 秒可操作过渡、10 秒保护界面和完成庆祝；演示不会触发 Windows 锁屏。
 - 有理由中断：结束专注计划或提前撕贴均需填写至少 5 个字的理由。
 - 撕贴反馈：确认提前撕贴后播放撕起飞离动效和可关闭的短音效。
-- 数据分析：汇总最近 7 天的完成专注、完整休息率、中断时段、睡眠保护和延迟次数。
+- 数据分析：七日指标汇总保持不变；活动历史在本机 SQLite 中全量保存，支持范围筛选和 50 条分页。
 - 关于与更新：位于“设置 → 关于与更新”，提供版本记录和 GitHub 更新入口。
 
 ### 获取与运行
 
-从 [GitHub Release v1.1.2](https://github.com/weichi-ai/ai-cooling-patch/releases/tag/v1.1.2) 下载 [`AI-Cooling-Patch-v1.1.2-win-x64-self-contained.zip`](https://github.com/weichi-ai/ai-cooling-patch/releases/download/v1.1.2/AI-Cooling-Patch-v1.1.2-win-x64-self-contained.zip)，完整解压后运行 `LockPC.App.exe`。
+从 [GitHub Release v1.1.3](https://github.com/weichi-ai/ai-cooling-patch/releases/tag/v1.1.3) 下载 [`AI-Cooling-Patch-v1.1.3-win-x64-self-contained.zip`](https://github.com/weichi-ai/ai-cooling-patch/releases/download/v1.1.3/AI-Cooling-Patch-v1.1.3-win-x64-self-contained.zip)，完整解压后运行 `LockPC.App.exe`。
 
 自包含版本无需安装 .NET。请勿只复制 exe，运行库必须与主程序保持在同一目录。首次体验建议打开“专注” → “试贴休息模式（10 秒）”。
 
@@ -68,7 +69,7 @@ AI退烧贴（项目代号 LockPC）是一款 Windows 10/11 专注与睡眠保�
 dotnet build .\LockPC.sln
 ```
 
-设置和运行状态默认保存在 `%LOCALAPPDATA%\LockPC`。开发测试可通过 `LOCKPC_DATA_DIR` 环境变量指定其他目录。
+设置、运行状态和 SQLite 活动历史默认保存在 `%LOCALAPPDATA%\LockPC`。开发测试可通过 `LOCKPC_DATA_DIR` 环境变量指定其他目录。
 
 ---
 
@@ -85,15 +86,16 @@ One digital cooling patch for continuous focus, enforced off-screen breaks, and 
 
 AI Cooling Patch (project codename: LockPC) is a focus and sleep-protection utility for Windows 10/11. It combines timed focus plans, enforced off-screen breaks, and scheduled sleep protection to reduce the impact of prolonged computer and AI use on rest and sleep. Keep the AI—cool the fever.
 
-### What changed in v1.1.2
+### What changed in v1.1.3
 
-- Fixes a cross-midnight bug where delaying 23:30 to 00:00 could leak the delay into the next night and silently postpone that schedule by another 30 minutes.
-- Every sleep window now has an immutable occurrence date that does not change when its effective start crosses midnight.
-- Delay requests validate the occurrence identity, allowed time, and one-time limit; stale-window and duplicate requests are rejected by the engine and logged with a reason.
-- On first launch, v1.1.2 detects and removes invalid delay state left by v1.1.1 while preserving a legitimate delay that is still in progress.
-- Completing sleep protection clears its warning, delay, and active markers so the following night returns to the configured time.
+- Moves activity history from JSON to embedded SQLite, removes the 10,000-event cap, and avoids rewriting the entire history file for every event.
+- Imports the existing `activity-events.json` once, idempotently, while preserving an `activity-events.v1.1.2.json.bak` backup.
+- Shows the last 7 days by default, with 15-day, 30-day, and all-history filters and 50-row pages.
+- Completes the 1–12 focus-round choices and replaces the legacy start warning with a plan-summary confirmation dialog.
+- Adds live round and break countdown text to the system tray, plus a two-line idle status.
+- Fixes high-DPI/small-screen window placement and improves early-peel button readability and break wording.
 
-### What’s included in v1.1.2
+### What’s included in v1.1.3
 
 - Focus plans: 15/25/30/45/50/60-minute sessions while the computer remains usable.
 - Enforced breaks: covers every display and blocks ordinary mouse and keyboard input after each focus round.
@@ -107,12 +109,12 @@ AI Cooling Patch (project codename: LockPC) is a focus and sleep-protection util
 - Safe demos: break and sleep previews both show the full 15-second usable transition, 10-second protection state, and completion celebration without invoking Windows lock.
 - Reasoned interruptions: ending a focus plan or peeling early requires a reason of at least five characters.
 - Peel feedback: plays a peel-and-fly animation and an optional short sound after confirmation.
-- Local analytics: summarizes the last seven days of completed focus time, full-break rate, interruption periods, sleep protection, and delays.
+- Local analytics: keeps seven-day summary metrics while storing complete activity history in local SQLite with filters and 50-row pagination.
 - About and updates: available under Settings → About & Updates, with version history and GitHub update access.
 
 ### Download and run
 
-Download [`AI-Cooling-Patch-v1.1.2-win-x64-self-contained.zip`](https://github.com/weichi-ai/ai-cooling-patch/releases/download/v1.1.2/AI-Cooling-Patch-v1.1.2-win-x64-self-contained.zip) from [GitHub Release v1.1.2](https://github.com/weichi-ai/ai-cooling-patch/releases/tag/v1.1.2), extract the entire archive, then run `LockPC.App.exe`.
+Download [`AI-Cooling-Patch-v1.1.3-win-x64-self-contained.zip`](https://github.com/weichi-ai/ai-cooling-patch/releases/download/v1.1.3/AI-Cooling-Patch-v1.1.3-win-x64-self-contained.zip) from [GitHub Release v1.1.3](https://github.com/weichi-ai/ai-cooling-patch/releases/tag/v1.1.3), extract the entire archive, then run `LockPC.App.exe`.
 
 The self-contained build does not require .NET to be installed. Do not copy the exe by itself—the accompanying runtime files must remain in the same directory. For a first look, open Focus → “10-second break preview.”
 

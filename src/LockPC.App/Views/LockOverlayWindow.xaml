@@ -15,7 +15,7 @@
         <Ellipse Width="760" Height="360" Fill="#1830C9B5" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-150,-180,0"/>
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="760" Margin="40" TextBlock.Foreground="White">
             <TextBlock x:Name="KickerText" Text="退烧贴正在生效" FontSize="15" Opacity=".82" HorizontalAlignment="Center"/>
-            <TextBlock x:Name="TitleText" Text="离开屏幕，给大脑降降温。" FontSize="36" FontWeight="SemiBold" TextAlignment="Center" Margin="0,12,0,8" TextWrapping="Wrap"/>
+            <TextBlock x:Name="TitleText" Text="离开屏幕，让大脑和眼睛放松一下。" FontSize="36" FontWeight="SemiBold" TextAlignment="Center" Margin="0,12,0,8" TextWrapping="Wrap"/>
             <TextBlock x:Name="DescriptionText" Text="本轮专注已经完成，休息结束后再回来。" FontSize="16" Opacity=".78" TextAlignment="Center"/>
 
             <Grid x:Name="CoolingPanel" Width="440" Height="190" Margin="0,28,0,8">
