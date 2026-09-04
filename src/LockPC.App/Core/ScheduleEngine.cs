@@ -224,7 +224,12 @@ public sealed class ScheduleEngine : IDisposable
         {
             var completedOccurrenceDate = _runtime.ActiveSleepOccurrenceDate;
             AppendActivity(ActivityEventType.SleepCompleted, utcNow,
-                durationSeconds: ElapsedSeconds(utcNow), sleepOccurrenceDate: completedOccurrenceDate);
+                durationSeconds: ElapsedSeconds(utcNow),
+                delayMinutes: completedOccurrenceDate is not null &&
+                    _runtime.DelayedSleepOccurrenceDate == completedOccurrenceDate
+                        ? _runtime.DelayedSleepMinutes
+                        : 0,
+                sleepOccurrenceDate: completedOccurrenceDate);
             ClearSleepOccurrenceState(completedOccurrenceDate);
             StartCelebration(LockPhase.SleepCelebration, utcNow, waitForSessionUnlock: _sessionLocked);
             return;

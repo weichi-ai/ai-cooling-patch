@@ -111,6 +111,10 @@ public sealed class AnalyticsService(StateStore store)
     private static string EventDetail(ActivityEventRecord item)
     {
         if (!string.IsNullOrWhiteSpace(item.Reason)) return item.Reason!;
+        if (item.EventType == ActivityEventType.SleepCompleted)
+            return item.DelayMinutes > 0
+                ? $"延迟 {item.DelayMinutes} 分钟后睡眠"
+                : "按时睡眠";
         if (item.DelayMinutes > 0) return $"延迟 {item.DelayMinutes} 分钟";
         if (item.DurationSeconds > 0) return $"{TimeSpan.FromSeconds(item.DurationSeconds):hh\\:mm\\:ss}";
         return item.TotalRounds > 0 ? $"第 {item.CurrentRound}/{item.TotalRounds} 轮" : "—";

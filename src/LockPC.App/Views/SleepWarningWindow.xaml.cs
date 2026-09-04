@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using LockPC.App.Core;
 
@@ -19,7 +20,10 @@ public partial class SleepWarningWindow : Window
         InitializeComponent();
         _scheduledStart = scheduledStart;
         _occurrenceDate = occurrenceDate;
-        MessageText.Text = $"睡眠保护将在 30 秒后开始，请立即保存文件和正在进行的工作。到点后电脑将锁定，{scheduledEnd:MM月dd日 HH:mm} 自动解除。";
+        MessageText.Text = "睡眠保护将在 30 秒后开始。请先保存正在处理的文件并退出运行中的闲置应用，届时电脑会自动锁定。";
+        UnlockTimeText.Text = scheduledEnd.Date == DateTime.Today.AddDays(1)
+            ? $"明早 {scheduledEnd:HH:mm}"
+            : $"{scheduledEnd:MM月dd日 HH:mm}";
         SetDelayAvailable(canDelay);
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += (_, _) => UpdateCountdown();
@@ -33,6 +37,7 @@ public partial class SleepWarningWindow : Window
         if (remaining < TimeSpan.Zero)
             remaining = TimeSpan.Zero;
         CountdownText.Text = $"{(int)remaining.TotalMinutes:00}:{remaining.Seconds:00}";
+        CountdownProgress.Value = Math.Min(30, remaining.TotalSeconds);
         if (remaining == TimeSpan.Zero)
             Close();
     }
@@ -55,6 +60,14 @@ public partial class SleepWarningWindow : Window
             ? "今晚还可以申请最后一次延迟，最长 30 分钟。"
             : "今晚已经延迟过一次，不能再次延迟。";
     }
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed)
+            DragMove();
+    }
+
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
     private void Acknowledge_Click(object sender, RoutedEventArgs e) => Close();
 

@@ -60,6 +60,31 @@ Run("SQLite 历史记录支持全量 50 行分页与日期范围", () =>
     }
 });
 
+Run("数据分析记录延迟分钟与按时睡眠", () =>
+{
+    var testDirectory = Path.Combine(Path.GetTempPath(), $"LockPC-SleepAnalytics-{Guid.NewGuid():N}");
+    try
+    {
+        Environment.SetEnvironmentVariable("LOCKPC_DATA_DIR", testDirectory);
+        var store = new StateStore();
+        store.AppendActivityEvent(new ActivityEventRecord(Guid.NewGuid(), null,
+            ActivityEventType.SleepDelayed, DateTimeOffset.Now.AddHours(-8), DelayMinutes: 30));
+        store.AppendActivityEvent(new ActivityEventRecord(Guid.NewGuid(), null,
+            ActivityEventType.SleepCompleted, DateTimeOffset.Now, DurationSeconds: 8 * 60 * 60,
+            DelayMinutes: 30));
+
+        var snapshot = new AnalyticsService(store).BuildLastSevenDays();
+        var history = new AnalyticsService(store).BuildActivityPage(ActivityHistoryRange.All, 1, 50);
+        Equal(1, snapshot.SleepDelays);
+        Equal("延迟 30 分钟后睡眠", history.Rows[0].Detail);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("LOCKPC_DATA_DIR", null);
+        if (Directory.Exists(testDirectory)) Directory.Delete(testDirectory, true);
+    }
+});
+
 Run("托盘空闲状态使用两行提示", () =>
 {
     var snapshot = new RuntimeSnapshot(LockPhase.Idle, null, TimeSpan.Zero, 0, 0, false,
@@ -242,7 +267,7 @@ if (failures.Count > 0)
     return 1;
 }
 
-Console.WriteLine("All 11 schedule, tray, and SQLite scenarios passed.");
+Console.WriteLine("All 12 schedule, tray, and SQLite scenarios passed.");
 return 0;
 
 void Run(string name, Action action)
